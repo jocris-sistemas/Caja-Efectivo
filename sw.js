@@ -1,6 +1,6 @@
 // Service worker: la app siempre intenta la red primero (para no quedarse con versiones viejas)
 // y solo usa lo guardado si no hay internet. Nunca guarda datos de Supabase.
-const CACHE = 'caja-v1';
+const CACHE = 'caja-v2';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

@@ -171,6 +171,27 @@ nav.tabs{justify-content:center}nav.tabs button{max-width:220px}
 .thumbs img{height:60px;border-radius:8px;border:1px solid var(--line)}
 .bigbtn{width:100%;padding:15px;font-size:17px}
 .chip.sin{background:var(--badbg);color:var(--bad)} .chip.ent{background:var(--okbg);color:var(--ok)} .chip.gas{background:var(--warnbg);color:var(--warn)}
+
+.semitem{display:block;cursor:pointer}
+.semitem .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.semitem .bar{height:6px;background:#eceff3;border-radius:5px;margin-top:8px;overflow:hidden}
+.semitem .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#e6c371)}
+details.sg{background:#fff;border:1px solid #e6eaf1;border-radius:12px;margin-bottom:10px;box-shadow:var(--shadow);overflow:hidden}
+details.sg>summary{list-style:none;cursor:pointer;display:flex;gap:8px;align-items:center;padding:12px 14px;font-weight:700;background:#f7f9fc}
+details.sg>summary::-webkit-details-marker{display:none}
+details.sg>summary .gn{flex:1}
+details.sg>summary .pc{font-weight:600;color:var(--mut);font-size:12.5px}
+details.sg>summary .gt{font-variant-numeric:tabular-nums}
+details.sg>summary::before{content:"▸";color:var(--mut);transition:transform .12s}
+details.sg[open]>summary::before{transform:rotate(90deg)}
+.sl{display:flex;gap:10px;justify-content:space-between;padding:9px 14px;border-top:1px solid #eef1f5;font-size:14px}
+.sl .c{flex:1;min-width:0;overflow-wrap:anywhere}
+.sl .c small{display:block;color:var(--mut);font-size:12px}
+.sl .m{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.sembars .br .n{width:112px;font-size:12.5px}
+.semnav{display:flex;gap:8px;margin-bottom:12px}.semnav .btn{flex:1}
+nav.tabs button{min-width:0}
+nav.tabs button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -223,6 +244,7 @@ const ICON = {
   nuevo: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
   arq: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg>',
   bit: '<svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg>',
+  sem: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M8 14h3M13 14h3M8 17h3"/></svg>',
   empty: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6"/></svg>'
 };
 
@@ -274,7 +296,7 @@ async function boot() {
 
 /* ===================== SHELL ===================== */
 function renderShell() {
-  const tabs = [['caja', 'Caja'], ['mov', 'Movimientos'], ['nuevo', 'Nuevo'], ['arq', 'Arqueo'], ['bit', 'Bitácora']];
+  const tabs = [['caja', 'Caja'], ['mov', 'Movim.'], ['nuevo', 'Nuevo'], ['arq', 'Arqueo'], ['sem', 'Semanas'], ['bit', 'Bitácora']];
   $('#app').innerHTML = `
   <header class="top">
     <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
@@ -288,7 +310,8 @@ function go(tab, opts) {
   S.tab = tab;
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   if (tab !== 'nuevo') S.F = null;
-  ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, bit: viewBit }[tab])(opts);
+  if (tab === 'sem' && !(opts && opts.keep)) S.semSel = null;
+  ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit }[tab])(opts);
   window.scrollTo(0, 0);
 }
 
@@ -639,6 +662,105 @@ async function viewArq() {
   } catch (e) { $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
 }
 
+
+/* ===================== VISTA: SEMANAS (historial de gasto semanal) ===================== */
+const GRUPOS_ORD = ['OFICINA', 'JOCRIS', 'ANGEL', 'ING. OMAR', 'ING. EGBERT', 'ING. RENE', 'MAQUINARIA', 'JCGP', 'CANCUN', 'ERICK', 'OTROS', 'CONTRATISTAS'];
+const MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fsem = d => { const [y, m, dd] = d.split('-'); return `${Number(dd)} ${MES_C[Number(m) - 1]} ${y}`; };
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+const ordGrupo = g => { const i = GRUPOS_ORD.indexOf(g); return i < 0 ? 99 : i; };
+async function cargarHist(force) {
+  if (S.hist && !force) return S.hist;
+  let all = [], from = 0;
+  for (;;) {
+    const { data, error } = await sb.from('caja_historial_semanal').select('semana,orden,folio,grupo,concepto,importe,nota')
+      .order('semana', { ascending: true }).order('orden', { ascending: true }).range(from, from + 999);
+    if (error) throw error;
+    all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
+  }
+  const by = {};
+  all.forEach(r => { const w = by[r.semana] || (by[r.semana] = { semana: r.semana, c: 0, rows: [] }); w.c += cents(r.importe); w.rows.push(r); });
+  S.hist = all; S.semanas = Object.values(by).sort((a, b) => a.semana < b.semana ? 1 : -1);
+  return all;
+}
+function gruposDe(w) {
+  const g = {}; w.rows.forEach(r => { const k = r.grupo || 'OTROS'; (g[k] || (g[k] = { nombre: k, c: 0, rows: [] })); g[k].c += cents(r.importe); g[k].rows.push(r); });
+  return Object.values(g).sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
+}
+const lineaSem = (r, conSemana) => `<div class="sl"><div class="c">${esc(r.concepto || '')}<small>${r.folio ? 'Folio ' + esc(r.folio) + ' · ' : ''}${esc(r.grupo || '')}${conSemana ? ' · semana del ' + esc(fsem(r.semana)) : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div><div class="m">${fmt(r.importe)}</div></div>`;
+async function viewSem() {
+  $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
+  try { await cargarHist(); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+  if (!S.semanas.length) return $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal</h2></div><div class="card empty">${ICON.empty}<div>Todavía no hay historial cargado.</div></div>`;
+  const w = S.semSel && S.semanas.find(x => x.semana === S.semSel);
+  if (w) return viewSemDet(w);
+  const tot = S.semanas.reduce((a, x) => a + x.c, 0), n = S.semanas.length;
+  const mxW = S.semanas.reduce((a, x) => x.c > a.c ? x : a), mnW = S.semanas.reduce((a, x) => x.c < a.c ? x : a);
+  const gy = {}; S.hist.forEach(r => { const k = r.grupo || 'OTROS'; gy[k] = (gy[k] || 0) + cents(r.importe); });
+  const garr = Object.entries(gy).sort((a, b) => b[1] - a[1]); const gmx = garr[0][1];
+  const anio = S.semanas[0].semana.slice(0, 4);
+  let html = '', lastM = '';
+  const mxc = mxW.c;
+  S.semanas.forEach(x => {
+    const m = x.semana.slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
+    html += `<div class="item semitem" data-act="sem" data-id="${x.semana}"><div class="top"><div class="hl b">Semana del ${esc(fsem(x.semana))}</div><span class="money">${fmt(x.c / 100)}</span></div>
+      <div class="mut sm">${x.rows.length} líneas</div><div class="bar"><i style="width:${Math.max(3, Math.round(x.c / mxc * 100))}%"></i></div></div>`;
+  });
+  $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal ${esc(anio)}</h2><span class="sub">Historial por semana</span></div>
+    <div class="statgrid">
+      <div class="stat out"><div class="l">Total ${esc(anio)}</div><div class="v">${fmt(tot / 100)}</div></div>
+      <div class="stat"><div class="l">Promedio semanal</div><div class="v">${fmt(Math.round(tot / n) / 100)}</div></div>
+      <div class="stat"><div class="l">Semana más alta</div><div class="v">${fmt(mxW.c / 100)}</div><div class="mut sm">${esc(fsem(mxW.semana))}</div></div>
+      <div class="stat"><div class="l">Semana más baja</div><div class="v">${fmt(mnW.c / 100)}</div><div class="mut sm">${esc(fsem(mnW.semana))}</div></div></div>
+    <div class="filters card" style="padding:10px"><input type="text" id="semQ" placeholder="Buscar en todas las semanas (concepto, folio, persona)…" value="${esc(S.semQ || '')}"></div>
+    <div id="semRes" class="hidden"></div>
+    <div id="semLista">
+      <div class="card bars sembars"><div class="b" style="margin-bottom:4px">Total del año por grupo</div>${garr.map(([g, v]) => `<div class="br"><div class="n">${esc(g)}</div><div class="bar"><i style="width:${Math.max(2, Math.round(v / gmx * 100))}%"></i></div><div class="m">${fmt(v / 100)}</div></div>`).join('')}</div>
+      <div class="r" style="margin-bottom:6px"><button class="btn ghost sm" data-act="semxlsall">Descargar todo en Excel</button></div>
+      ${html}</div>`;
+  const pintaBusqueda = () => {
+    const q = norm($('#semQ').value.trim()); S.semQ = $('#semQ').value.trim();
+    if (q.length < 2) { $('#semRes').classList.add('hidden'); $('#semLista').classList.remove('hidden'); return; }
+    const hit = S.hist.filter(r => norm(`${r.concepto} ${r.folio || ''} ${r.grupo} ${r.nota || ''}`).includes(q)).sort((a, b) => a.semana < b.semana ? 1 : -1);
+    const sum = hit.reduce((a, r) => a + cents(r.importe), 0);
+    $('#semLista').classList.add('hidden'); const box = $('#semRes'); box.classList.remove('hidden');
+    box.innerHTML = hit.length ? `<div class="card"><div class="b">${hit.length} línea(s) · ${fmt(sum / 100)}</div><div class="mut sm">Toca una línea para abrir su semana.</div></div>
+      <div class="card" style="padding:0;overflow:hidden">${hit.slice(0, 200).map(r => `<div data-act="sem" data-id="${r.semana}" style="cursor:pointer">${lineaSem(r, true)}</div>`).join('')}</div>${hit.length > 200 ? '<div class="mut sm" style="text-align:center">Mostrando las primeras 200; afina la búsqueda.</div>' : ''}`
+      : `<div class="card empty">${ICON.empty}<div>Sin resultados.</div></div>`;
+  };
+  let t; $('#semQ').oninput = () => { clearTimeout(t); t = setTimeout(pintaBusqueda, 250); };
+  if (S.semQ) pintaBusqueda();
+}
+function viewSemDet(w) {
+  const i = S.semanas.indexOf(w), nueva = S.semanas[i - 1], vieja = S.semanas[i + 1];
+  const gs = gruposDe(w);
+  $('#view').innerHTML = `<div class="pagehead"><h2>Semana del ${esc(fsem(w.semana))}</h2></div>
+    <div class="semnav"><button class="btn ghost sm" data-act="sembak">← Todas las semanas</button></div>
+    <div class="saldo"><div class="lbl">Gasto de la semana</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos</div></div>
+    <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ ${esc(fsem(vieja.semana))}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">${esc(fsem(nueva.semana))} ›</button>` : ''}</div>
+    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => lineaSem(r)).join('')}</details>`).join('')}
+    <div class="r" style="margin:6px 0 12px"><button class="btn ghost sm" data-act="semxls" data-id="${w.semana}">Descargar esta semana en Excel</button></div>`;
+}
+async function semExcel(semana) {
+  await cargarSheetJS(); await cargarHist();
+  const wb = XLSX.utils.book_new(); const num = v => Number(v);
+  const det = r => ({ Semana: r.semana, Grupo: r.grupo, Folio: r.folio || '', Concepto: r.concepto, Importe: num(r.importe), Nota: r.nota || '' });
+  if (semana) {
+    const w = S.semanas.find(x => x.semana === semana);
+    const rows = gruposDe(w).flatMap(g => g.rows).map(det); rows.push({ Semana: semana, Grupo: 'TOTAL', Folio: '', Concepto: '', Importe: w.c / 100, Nota: '' });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Semana ' + semana);
+    XLSX.writeFile(wb, `Gasto_semanal_${semana}.xlsx`);
+  } else {
+    const asc = [...S.semanas].reverse();
+    const todos = [...new Set(S.hist.map(r => r.grupo || 'OTROS'))].sort((x, y) => ordGrupo(x) - ordGrupo(y) || x.localeCompare(y));
+    const res = asc.map(w => { const o = { Semana: w.semana, Lineas: w.rows.length }; todos.forEach(g => o[g] = 0); gruposDe(w).forEach(g => o[g.nombre] = g.c / 100); o.TOTAL = w.c / 100; return o; });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(res), 'Resumen semanal');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(S.hist.map(det)), 'Detalle');
+    XLSX.writeFile(wb, `Gasto_semanal_${asc[0].semana.slice(0, 4)}_historial.xlsx`);
+  }
+  toast('Excel descargado.', 'ok');
+}
+
 /* ===================== VISTA: BITACORA ===================== */
 async function viewBit() {
   $('#view').innerHTML = `<div class="pagehead"><h2>Bitácora de caja</h2><span class="sub">Registro permanente; no se puede borrar ni editar</span></div><div id="bitList" class="spin">Cargando…</div>`;
@@ -730,6 +852,10 @@ document.addEventListener('click', async ev => {
       case 'faltantes': go('mov', { sinTicket: true }); break;
       case 'quitarfaltan': S._soloFaltan = false; viewMov({ keep: true }); break;
       case 'mas': S.page++; await loadMov(); break;
+      case 'sem': S.semSel = id; viewSem(); window.scrollTo(0, 0); break;
+      case 'sembak': S.semSel = null; viewSem(); window.scrollTo(0, 0); break;
+      case 'semxls': await semExcel(id); break;
+      case 'semxlsall': await semExcel(null); break;
       case 'detalle': closeModal(); await openDetail(id); break;
       case 'abrir': await abrirPath(el.dataset.path); break;
       case 'tipo': if (S.F) { const keepFiles = S.F.files; S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); } break;
