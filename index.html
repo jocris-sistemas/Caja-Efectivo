@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14345c">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Caja">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Caja de Efectivo · Jocris</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+
+:root{
+  --navy:#14345c; --navy2:#1d4577; --gold:#c99a3c; --bg:#f3f5f9; --card:#fff; --ink:#1b2430; --mut:#6b7482;
+  --line:#e1e5ec; --ok:#1e8a4c; --okbg:#e5f6ec; --warn:#b26a00; --warnbg:#fff3dc; --bad:#b3261e; --badbg:#fdebea; --info:#1d4577; --infobg:#e8f0fb;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4;padding-bottom:84px}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+header.top{background:var(--navy);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;border-bottom:3px solid var(--gold)}
+header.top .brand{font-weight:700;letter-spacing:.3px;flex:1}
+header.top .brand small{display:block;font-weight:400;opacity:.75;font-size:11.5px;letter-spacing:0}
+header.top button{background:rgba(255,255,255,.14);border:0;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;background:none;border:0;padding:10px 2px 9px;font-size:12px;color:var(--mut);cursor:pointer;position:relative;font-weight:600}
+nav.tabs button.on{color:var(--navy);box-shadow:inset 0 3px 0 var(--gold)}
+nav.tabs .badge{position:absolute;top:4px;left:calc(50% + 8px);background:var(--bad);color:#fff;border-radius:9px;font-size:10.5px;min-width:18px;padding:1px 5px}
+main{max-width:980px;margin:0 auto;padding:14px 14px 20px}
+h2{margin:6px 0 12px;font-size:19px;color:var(--navy)}
+h3{margin:14px 0 8px;font-size:15px;color:var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(20,52,92,.04)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grow{flex:1;min-width:0}
+.mut{color:var(--mut)} .sm{font-size:12.5px} .b{font-weight:700} .r{text-align:right}
+.money{font-variant-numeric:tabular-nums;font-weight:700}
+.big{font-size:22px}
+label.f{display:block;font-size:12.5px;color:var(--mut);margin:10px 0 3px;font-weight:600}
+input[type=text],input[type=number],input[type=date],input[type=password],input[type=email],select,textarea{width:100%;padding:10px 11px;border:1px solid #cbd2dc;border-radius:9px;background:#fff;font-size:16px}
+textarea{min-height:70px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);border-color:var(--gold)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer;background:var(--navy);color:#fff;font-size:15px}
+.btn.gold{background:var(--gold);color:#fff}
+.btn.ok{background:var(--ok)} .btn.bad{background:var(--bad)}
+.btn.ghost{background:#fff;color:var(--navy);border:1px solid #c5cddb}
+.btn.sm{padding:7px 11px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+.chip.pendiente{background:var(--warnbg);color:var(--warn)}
+.chip.autorizado{background:var(--infobg);color:var(--info)}
+.chip.cobrado{background:var(--okbg);color:var(--ok)}
+.chip.rechazado,.chip.cancelado{background:var(--badbg);color:var(--bad)}
+.chip.historial{background:#eceff3;color:#59626f}
+.chip.warn{background:var(--warnbg);color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;color:var(--mut);letter-spacing:.4px;padding:6px 6px;border-bottom:1px solid var(--line)}
+td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.cheque-item{cursor:pointer}
+.cheque-item:active{background:#f8f9fc}
+.sumbar{position:sticky;bottom:78px;background:#fff;border:2px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;box-shadow:0 -4px 14px rgba(0,0,0,.08);z-index:5}
+.sumbar.okk{border-color:var(--ok);background:var(--okbg)}
+.sumbar.noo{border-color:var(--bad);background:var(--badbg)}
+.line{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:#fbfcfe}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media(max-width:560px){.grid3{grid-template-columns:1fr 1fr}}
+.overlay{position:fixed;inset:0;background:rgba(15,25,40,.55);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:760px;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+@media(min-width:760px){.overlay{align-items:center}.sheet{border-radius:16px}}
+.sheet .x{float:right;background:#e6eaf1;border:0;border-radius:50%;width:34px;height:34px;font-size:18px;cursor:pointer}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:#222;color:#fff;padding:11px 16px;border-radius:10px;z-index:99;max-width:92%;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+#toast.err{background:var(--bad)} #toast.ok{background:var(--ok)}
+.login{max-width:380px;margin:12vh auto 0;padding:0 18px}
+.login .logo{background:var(--navy);color:#fff;border-radius:16px 16px 0 0;padding:22px;text-align:center;border-bottom:4px solid var(--gold)}
+.login .logo b{font-size:22px;letter-spacing:.5px;display:block}
+.login .box{background:#fff;border:1px solid var(--line);border-top:0;border-radius:0 0 16px 16px;padding:8px 20px 22px}
+.pw{position:relative}.pw input{padding-right:48px}.pw .eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:0;padding:9px;cursor:pointer;color:var(--mut);display:flex;line-height:0}.pw .eye:hover{color:var(--navy)}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:14px}
+.kv div:nth-child(odd){color:var(--mut)}
+.files a,.files button.lnk{color:var(--navy2);text-decoration:underline;background:none;border:0;padding:0;cursor:pointer;font-size:14px}
+.log{font-size:13px;border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:6px 0}
+.spin{text-align:center;color:var(--mut);padding:24px}
+.warnbox{background:var(--warnbg);border:1px solid #f0d49b;color:#6a4400;border-radius:10px;padding:9px 12px;font-size:13.5px;margin:8px 0}
+.okbox{background:var(--okbg);border:1px solid #b7e2c7;color:#14683a;border-radius:10px;padding:9px 12px;font-size:13.5px;margin:8px 0}
+
+/* ---- Diseño 2.0 ---- */
+:root{--shadow:0 1px 2px rgba(20,52,92,.06),0 4px 14px rgba(20,52,92,.06);--radius:14px}
+body{background:linear-gradient(180deg,#eaeff6 0,#f4f6fa 220px) fixed;font-size:15px;letter-spacing:.005em}
+header.top{background:linear-gradient(135deg,#102c50,#1d4577);border-bottom:0;box-shadow:0 2px 10px rgba(16,44,80,.25);padding-top:calc(10px + env(safe-area-inset-top));padding-bottom:10px}
+header.top::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--gold),#e6c371 50%,var(--gold))}
+header.top .brand{display:flex;align-items:center;gap:11px;font-size:15px}
+header.top .brand .mark{width:36px;height:36px;border-radius:11px;background:var(--gold);color:#fff;font-weight:800;font-size:19px;display:grid;place-items:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15);flex:none}
+header.top .brand small{margin-top:1px;opacity:.8;font-size:12px}
+header.top .acct{width:38px;height:38px;border-radius:50%;padding:0;font-weight:700;font-size:14px;background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.35)}
+nav.tabs{background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);box-shadow:0 -4px 18px rgba(20,52,92,.08);padding-top:4px}
+nav.tabs button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;padding:7px 2px 8px;box-shadow:none!important}
+nav.tabs button svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+nav.tabs button.on{color:var(--navy)}
+nav.tabs button.on svg{transform:translateY(-1px);stroke:var(--navy)}
+nav.tabs button.on::before{content:"";position:absolute;top:-5px;left:30%;right:30%;height:3px;border-radius:0 0 4px 4px;background:var(--gold)}
+nav.tabs .badge{top:2px;left:calc(50% + 6px);box-shadow:0 0 0 2px #fff}
+main{padding:16px 14px 24px}
+.pagehead{display:flex;align-items:flex-end;gap:10px;margin:4px 2px 14px}
+.pagehead h2{margin:0;font-size:22px;letter-spacing:-.01em}
+.pagehead .sub{color:var(--mut);font-size:13px;margin-bottom:2px}
+.card{border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid #e6eaf1}
+.btn{border-radius:11px;box-shadow:0 1px 0 rgba(0,0,0,.08);transition:filter .12s,transform .05s}
+.btn:hover{filter:brightness(1.06)} .btn:active{transform:translateY(1px)}
+.btn.ghost{box-shadow:none}
+.chip{padding:3px 10px;font-size:11.5px;letter-spacing:.2px}
+input[type=text],input[type=number],input[type=date],input[type=password],input[type=email],select,textarea{border-radius:10px;border-color:#d3dae4;transition:border-color .12s,box-shadow .12s}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,154,60,.22)}
+h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.6px;color:#51627a;margin:20px 2px 8px}
+/* lista del historial */
+.dayh{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#51627a;margin:16px 4px 7px;display:flex;align-items:center;gap:8px}
+.dayh::after{content:"";flex:1;height:1px;background:#d9e0ea}
+.item{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #e6eaf1;border-left:4px solid #c3ccd8;border-radius:12px;padding:11px 13px;margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer;transition:transform .08s,box-shadow .12s}
+.item:hover{box-shadow:0 2px 4px rgba(20,52,92,.08),0 8px 20px rgba(20,52,92,.09)}
+.item:active{transform:scale(.995)}
+.item .main{flex:1;min-width:0}
+.item .ben,.item .sub{font-size:16px;line-height:1.3;overflow-wrap:anywhere}
+.item .sub{color:#2b3645;font-weight:500;margin-top:2px}
+.hl{font-size:16px;line-height:1.3;font-weight:700}.hl2{font-size:16px;line-height:1.3;font-weight:500;color:#2b3645;margin-top:2px}
+.item .side{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none}
+.item .side .money{font-size:16px}
+.item.st-pendiente{border-left-color:#e0a23a}.item.st-autorizado{border-left-color:#2f6fb8}.item.st-cobrado{border-left-color:var(--ok)}
+.item.st-rechazado,.item.st-cancelado{border-left-color:var(--bad)}.item.st-hist{border-left-color:#c3ccd8}
+.item.st-cancelado .ben{text-decoration:line-through;text-decoration-color:#b3261e88}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters input{flex:1 1 100%}.filters select{flex:1 1 45%;min-width:0}
+@media(min-width:640px){.filters input{flex:2 1 260px}.filters select{flex:1 1 180px}}
+nav.tabs{justify-content:center}nav.tabs button{max-width:220px}
+.summary{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#fff,#f4f8ff);}
+.summary .ico{width:42px;height:42px;border-radius:12px;background:var(--infobg);color:var(--info);display:grid;place-items:center;flex:none}
+.summary .ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.empty{text-align:center;color:var(--mut);padding:30px 16px}
+.empty svg{width:42px;height:42px;stroke:#a9b4c4;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;margin-bottom:6px}
+@media(min-width:900px){main{padding-top:24px}.item{padding:13px 16px}}
+
+/* ---- Caja ---- */
+.saldo{background:linear-gradient(135deg,#102c50,#1d4577);color:#fff;border-radius:16px;padding:18px 18px 16px;box-shadow:var(--shadow);margin-bottom:12px;position:relative;overflow:hidden}
+.saldo::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,var(--gold),#e6c371 50%,var(--gold))}
+.saldo .lbl{font-size:12.5px;letter-spacing:.6px;text-transform:uppercase;opacity:.8}
+.saldo .num{font-size:36px;font-weight:800;font-variant-numeric:tabular-nums;margin:2px 0 6px;letter-spacing:-.5px}
+.saldo .sub2{font-size:13px;opacity:.85}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stat{background:#fff;border:1px solid #e6eaf1;border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.stat .l{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+.stat.in .v{color:var(--ok)} .stat.out .v{color:var(--bad)}
+.item.t-entrada{border-left-color:var(--ok)} .item.t-gasto{border-left-color:#e0a23a}
+.item.an{opacity:.62} .item.an .hl{text-decoration:line-through;text-decoration-color:#b3261e88}
+.pos{color:var(--ok)} .neg{color:var(--bad)}
+.seg{display:flex;background:#e6ebf3;border-radius:12px;padding:4px;gap:4px;margin-bottom:6px}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:11px 8px;font-weight:700;color:var(--mut);cursor:pointer;font-size:15px}
+.seg button.on.g{background:#fff;color:var(--warn);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.seg button.on.e{background:#fff;color:var(--ok);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.bars .br{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13.5px}
+.bars .br .n{width:92px;flex:none;font-weight:600}
+.bars .br .bar{flex:1;height:10px;background:#eceff3;border-radius:6px;overflow:hidden}
+.bars .br .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#e6c371)}
+.bars .br .m{width:96px;flex:none;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.thumbs img{height:60px;border-radius:8px;border:1px solid var(--line)}
+.bigbtn{width:100%;padding:15px;font-size:17px}
+.chip.sin{background:var(--badbg);color:var(--bad)} .chip.ent{background:var(--okbg);color:var(--ok)} .chip.gas{background:var(--warnbg);color:var(--warn)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast" class="hidden"></div>
+
+<script>
+/* ===================== CONFIG ===================== */
+const SUPABASE_URL = 'https://hbttxvanyqczspljtqpz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_J4abyTF0BPq47eBTVLjIFQ_5-x2HOiJ';
+const BUCKET = 'cheques-archivos';
+const PAGE = 40;
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ===================== ESTADO ===================== */
+const S = { perfil: null, cargos: [], tab: 'caja', saldo: null, F: null, filt: { q: '', mes: '', tipo: '', cargo: '' }, list: [], count: 0, page: 0, meses: [] };
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => { n = Number(n || 0); return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+const cents = n => Math.round(Number(n || 0) * 100);
+const fdate = d => { if (!d) return ''; const [y, m, dd] = String(d).slice(0, 10).split('-'); return `${dd}/${m}/${y}`; };
+const fdt = d => d ? new Date(d).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '';
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const parseMoney = s => { const t = String(s ?? '').replace(/[$,\s]/g, ''); if (t === '') return NaN; const n = Number(t); return isFinite(n) ? n : NaN; };
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const mesTxt = ym => { const [y, m] = ym.split('-'); return `${MESES[Number(m) - 1]} ${y}`; };
+const fdia = d => { const [y, m, dd] = d.split('-'); return `${Number(dd)} de ${MESES[Number(m) - 1]} de ${y}`; };
+const rol = () => S.perfil?.rol;
+const esAdmin = () => rol() === 'administrador';
+const rolTxt = r => ({ capturista: 'Administración', administrador: 'Administrador', contador: 'Contador' }[r] || r);
+const iniciales = n => String(n || '?').replace(/^ING\.\s*/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const cargoNombre = id => S.cargos.find(c => c.id === id)?.nombre || '?';
+const mxDia = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
+const hoyMx = () => mxDia(new Date());
+const errMsg = e => (e && (e.message || e.error_description)) || String(e);
+const archAct = m => (m.caja_archivos || []).filter(a => a.activo);
+const sinComprobante = m => /^SIN COMPROBANTE/i.test(m.nota || '');
+
+function toast(msg, type = '') {
+  const t = $('#toast'); t.textContent = msg; t.className = type; clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.add('hidden'), type === 'err' ? 6500 : 3000);
+}
+async function rpc(name, args) { const { data, error } = await sb.rpc(name, args); if (error) throw error; return data; }
+function openModal(html) { $('#modal').innerHTML = `<div class="overlay" data-act="ovl"><div class="sheet"><button class="x" data-act="close">×</button>${html}</div></div>`; }
+function closeModal() { $('#modal').innerHTML = ''; }
+const ICON = {
+  caja: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  mov: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+  nuevo: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+  arq: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg>',
+  bit: '<svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg>',
+  empty: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6"/></svg>'
+};
+
+/* ===================== AUTENTICACION ===================== */
+const EYE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const pwField = (id, ac) => `<div class="pw"><input type="password" id="${id}" autocomplete="${ac}" required><button type="button" class="eye" data-act="verpass" data-for="${id}" aria-label="Mostrar u ocultar contraseña">${EYE}</button></div>`;
+function renderLogin(msg = '') {
+  $('#app').innerHTML = `
+  <div class="login">
+    <div class="logo"><b>JOCRIS</b><span>Caja de Efectivo</span></div>
+    <div class="box">
+      <form id="fLogin">
+        <label class="f">Correo</label><input type="email" id="lgMail" autocomplete="username" required>
+        <label class="f">Contraseña</label>${pwField('lgPass', 'current-password')}
+        ${msg ? `<div class="warnbox">${esc(msg)}</div>` : ''}
+        <button class="btn" style="width:100%;margin-top:16px" id="lgBtn">Entrar</button>
+        <p class="mut sm" style="text-align:center;margin:14px 0 0">Es el mismo usuario y contraseña de Control de Cheques.</p>
+      </form>
+    </div>
+  </div>`;
+  $('#fLogin').onsubmit = async ev => {
+    ev.preventDefault(); const b = $('#lgBtn'); b.disabled = true; b.textContent = 'Entrando…';
+    const mail = $('#lgMail').value.trim().toLowerCase();
+    const back = m => { renderLogin(m); $('#lgMail').value = mail; };
+    let error;
+    try { ({ error } = await sb.auth.signInWithPassword({ email: mail, password: $('#lgPass').value })); } catch (e) { error = e; }
+    if (error) {
+      const m = String(error.message || error);
+      back(/invalid login|invalid_credentials|credentials/i.test(m) ? 'Correo o contraseña incorrectos.'
+        : /fetch|network|load failed/i.test(m) ? 'No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.'
+        : 'No se pudo entrar: ' + m); return;
+    }
+    try { await boot(); } catch (e) { back('Entraste, pero la app no pudo cargar: ' + String(e.message || e)); }
+  };
+}
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return renderLogin();
+  const { data: p } = await sb.from('perfiles').select('*').eq('id', session.user.id).maybeSingle();
+  if (!p || !p.activo) { await sb.auth.signOut(); return renderLogin('Tu usuario no está activo en el sistema. Avísale a Pedro.'); }
+  S.perfil = p;
+  $('#app').innerHTML = '<div class="spin">Cargando…</div>';
+  const c = await sb.from('cargos').select('*').eq('activo', true).order('id');
+  S.cargos = (c.data || []).filter(x => x.nombre !== 'SIN CARGO');
+  S.tab = 'caja';
+  renderShell();
+}
+
+/* ===================== SHELL ===================== */
+function renderShell() {
+  const tabs = [['caja', 'Caja'], ['mov', 'Movimientos'], ['nuevo', 'Nuevo'], ['arq', 'Arqueo'], ['bit', 'Bitácora']];
+  $('#app').innerHTML = `
+  <header class="top">
+    <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
+    <button class="acct" data-act="menu" title="Mi cuenta" aria-label="Mi cuenta">${esc(iniciales(S.perfil.nombre))}</button>
+  </header>
+  <main id="view"></main>
+  <nav class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${ICON[k] || ''}<span>${l}</span></button>`).join('')}</nav>`;
+  go(S.tab);
+}
+function go(tab, opts) {
+  S.tab = tab;
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  if (tab !== 'nuevo') S.F = null;
+  ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, bit: viewBit }[tab])(opts);
+  window.scrollTo(0, 0);
+}
+
+/* ===================== CONSULTAS ===================== */
+const SEL = '*, caja_archivos(id,activo,nombre,path,subido_por_nombre,creado_en)';
+async function loadSaldo() { S.saldo = await rpc('caja_saldo'); return S.saldo; }
+function itemMov(m) {
+  const ent = m.tipo === 'entrada', an = m.estatus === 'anulado';
+  const titulo = ent ? (m.concepto || 'ENTRADA DE EFECTIVO') : (m.proveedor || m.concepto || '—');
+  const sub = ent ? (m.proveedor ? m.proveedor : '') : `${cargoNombre(m.cargo_id)}${m.folio_numero ? ' · FOLIO ' + esc(m.folio_numero) : ''}${m.proveedor && m.concepto ? ' · ' + esc(m.concepto) : ''}`;
+  const sinT = !ent && !an && !m.es_historial && !archAct(m).length && !sinComprobante(m);
+  return `<div class="item t-${m.tipo} ${an ? 'an' : ''}" data-act="detalle" data-id="${m.id}">
+    <div class="main"><div class="hl">${esc(titulo)}</div><div class="hl2" style="font-size:14px">${sub}</div>
+      <div class="mut sm" style="margin-top:3px">${fdate(m.fecha)} · ${esc(m.creado_por_nombre || '')}</div></div>
+    <div class="side"><span class="money ${ent ? 'pos' : ''}">${ent ? '+' : '−'}${fmt(m.monto)}</span>
+      ${an ? '<span class="chip cancelado">Anulado</span>' : m.es_historial ? '<span class="chip historial">Historial</span>' : sinT ? '<span class="chip sin">Sin ticket</span>' : ent ? '<span class="chip ent">Entrada</span>' : '<span class="chip gas">Gasto</span>'}</div></div>`;
+}
+
+/* ===================== VISTA: CAJA (resumen) ===================== */
+async function viewCaja() {
+  $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
+  try {
+    const sd = await loadSaldo();
+    const ym = hoyMx().slice(0, 7); const [y, m] = ym.split('-').map(Number);
+    const nx = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const mes = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').gte('fecha', ym + '-01').lt('fecha', nx).order('fecha', { ascending: false })).data || [];
+    const ent = mes.filter(x => x.tipo === 'entrada').reduce((a, x) => a + cents(x.monto), 0) / 100;
+    const gas = mes.filter(x => x.tipo === 'gasto').reduce((a, x) => a + cents(x.monto), 0) / 100;
+    const porCargo = {}; mes.filter(x => x.tipo === 'gasto').forEach(x => porCargo[x.cargo_id] = (porCargo[x.cargo_id] || 0) + cents(x.monto) / 100);
+    const arr = Object.entries(porCargo).sort((a, b) => b[1] - a[1]); const mx = arr.length ? arr[0][1] : 1;
+    const rec = (await sb.from('caja_movimientos').select(SEL).order('creado_en', { ascending: false }).limit(8)).data || [];
+    const sinT = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(300)).data || [];
+    const faltan = sinT.filter(x => !archAct(x).length && !sinComprobante(x));
+    const aq = sd.arqueo;
+    const aqTxt = aq ? (cents(aq.diferencia) === 0 ? `<span class="pos">sin diferencia</span>` : `<span class="neg">diferencia ${fmt(aq.diferencia)}</span>`) : '';
+    $('#view').innerHTML = `
+      <div class="saldo"><div class="lbl">Efectivo en caja</div><div class="num">${fmt(sd.saldo)}</div>
+        <div class="sub2">${aq ? `Último arqueo: ${fdate(aq.fecha)} · contado ${fmt(aq.efectivo_contado)}` : 'Aún no hay arqueos registrados'}</div></div>
+      <div class="row" style="margin-bottom:12px">
+        <button class="btn gold grow bigbtn" data-act="nuevo" data-tipo="gasto">− Nuevo gasto</button>
+        <button class="btn ok grow bigbtn" data-act="nuevo" data-tipo="entrada">+ Nueva entrada</button></div>
+      ${aq && cents(aq.diferencia) !== 0 ? `<div class="warnbox">El último arqueo (${fdate(aq.fecha)}) tuvo una diferencia de <b>${fmt(aq.diferencia)}</b>.</div>` : ''}
+      ${faltan.length ? `<div class="warnbox"><b>${faltan.length}</b> gasto(s) sin ticket. <a href="#" data-act="faltantes" style="color:inherit;font-weight:700">Verlos</a></div>` : ''}
+      <h3>${esc(mesTxt(ym))}</h3>
+      <div class="statgrid"><div class="stat in"><div class="l">Entradas</div><div class="v">${fmt(ent)}</div></div><div class="stat out"><div class="l">Gastos</div><div class="v">${fmt(gas)}</div></div></div>
+      ${arr.length ? `<div class="card bars"><div class="b" style="margin-bottom:4px">Gastos del mes por cargo</div>${arr.map(([id, v]) => `<div class="br"><div class="n">${esc(cargoNombre(Number(id)))}</div><div class="bar"><i style="width:${Math.max(3, Math.round(v / mx * 100))}%"></i></div><div class="m">${fmt(v)}</div></div>`).join('')}</div>` : ''}
+      <h3>Últimos movimientos</h3>
+      ${rec.length ? rec.map(itemMov).join('') : `<div class="card empty">${ICON.empty}<div>Todavía no hay movimientos.</div></div>`}
+      ${rec.length ? `<div class="r"><button class="btn ghost sm" data-tab-go="mov">Ver todos</button></div>` : ''}`;
+    S._faltan = faltan;
+  } catch (e) { $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+}
+
+/* ===================== VISTA: MOVIMIENTOS ===================== */
+async function viewMov(opts) {
+  if (opts && opts.sinTicket) S._soloFaltan = true; else if (!opts || !opts.keep) S._soloFaltan = false;
+  $('#view').innerHTML = `<div class="pagehead"><h2>Movimientos</h2></div>
+    <div class="filters card" style="padding:10px">
+      <input type="text" id="fq" placeholder="Buscar proveedor, concepto o folio…" value="${esc(S.filt.q)}">
+      <select id="fmes"><option value="">Todos los meses</option>${S.meses.map(m => `<option value="${m}" ${S.filt.mes === m ? 'selected' : ''}>${esc(mesTxt(m))}</option>`).join('')}</select>
+      <select id="ftipo"><option value="">Entradas y gastos</option><option value="gasto" ${S.filt.tipo === 'gasto' ? 'selected' : ''}>Solo gastos</option><option value="entrada" ${S.filt.tipo === 'entrada' ? 'selected' : ''}>Solo entradas</option></select>
+      <select id="fcargo"><option value="">Todos los cargos</option>${S.cargos.map(c => `<option value="${c.id}" ${String(S.filt.cargo) === String(c.id) ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('')}</select>
+    </div>
+    ${S._soloFaltan ? `<div class="warnbox">Mostrando solo gastos sin ticket. <a href="#" data-act="quitarfaltan" style="color:inherit;font-weight:700">Quitar filtro</a></div>` : ''}
+    <div id="movList" class="spin">Cargando…</div>`;
+  const re = () => { S.filt.q = $('#fq').value.trim(); S.filt.mes = $('#fmes').value; S.filt.tipo = $('#ftipo').value; S.filt.cargo = $('#fcargo').value; S.page = 0; loadMov(); };
+  let t; $('#fq').oninput = () => { clearTimeout(t); t = setTimeout(re, 350); };
+  ['#fmes', '#ftipo', '#fcargo'].forEach(s => $(s).onchange = re);
+  cargarMeses(); S.page = 0; loadMov();
+}
+async function cargarMeses() {
+  const r = await sb.from('caja_movimientos').select('fecha').order('fecha', { ascending: false }).limit(5000);
+  const set = [...new Set((r.data || []).map(x => String(x.fecha).slice(0, 7)))].sort().reverse();
+  S.meses = set; const el = $('#fmes'); if (!el) return;
+  el.innerHTML = `<option value="">Todos los meses</option>` + set.map(m => `<option value="${m}" ${S.filt.mes === m ? 'selected' : ''}>${esc(mesTxt(m))}</option>`).join('');
+}
+async function loadMov() {
+  const box = $('#movList'); if (!box) return;
+  let q = sb.from('caja_movimientos').select(SEL, { count: 'exact' });
+  const f = S.filt;
+  if (f.tipo) q = q.eq('tipo', f.tipo);
+  if (f.cargo) q = q.eq('cargo_id', Number(f.cargo));
+  if (f.mes) { const [y, m] = f.mes.split('-').map(Number); q = q.gte('fecha', f.mes + '-01').lt('fecha', m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`); }
+  if (f.q) { const t = f.q.replace(/[,()%]/g, ' '); q = q.or(`proveedor.ilike.%${t}%,concepto.ilike.%${t}%,folio_numero.ilike.%${t}%`); }
+  if (S._soloFaltan) q = q.eq('tipo', 'gasto').eq('estatus', 'vigente').eq('es_historial', false);
+  q = q.order('fecha', { ascending: false }).order('numero', { ascending: false }).range(S.page * PAGE, S.page * PAGE + PAGE - 1);
+  const { data, count, error } = await q;
+  if (error) return box.innerHTML = `<div class="warnbox">${esc(errMsg(error))}</div>`;
+  let rows = data || [];
+  if (S._soloFaltan) rows = rows.filter(x => !archAct(x).length && !sinComprobante(x));
+  S.count = count || 0;
+  if (S.page === 0) S.list = rows; else S.list = S.list.concat(rows);
+  let html = '', last = '';
+  S.list.forEach(m => { if (m.fecha !== last) { last = m.fecha; html += `<div class="dayh">${esc(fdia(m.fecha))}</div>`; } html += itemMov(m); });
+  if (!S.list.length) html = `<div class="card empty">${ICON.empty}<div>No hay movimientos con ese filtro.</div></div>`;
+  if ((S.page + 1) * PAGE < S.count) html += `<div class="r" style="margin:8px 0"><button class="btn ghost" data-act="mas">Ver más</button></div>`;
+  box.className = ''; box.innerHTML = `<div class="mut sm" style="margin:0 4px 6px">${S.count} movimiento(s)</div>` + html;
+}
+
+/* ===================== DETALLE ===================== */
+async function openDetail(id) {
+  openModal('<div class="spin">Cargando…</div>');
+  try {
+    const { data: m } = await sb.from('caja_movimientos').select(SEL).eq('id', id).maybeSingle();
+    if (!m) throw new Error('Movimiento no encontrado.');
+    const { data: bit } = await sb.from('caja_bitacora').select('*').eq('movimiento_id', id).order('creado_en', { ascending: true });
+    const ent = m.tipo === 'entrada', an = m.estatus === 'anulado', arch = archAct(m);
+    const mio = m.creado_por === S.perfil.id && mxDia(m.creado_en) === hoyMx();
+    const puedeAnular = !an && (esAdmin() || (mio && !m.es_historial));
+    const puedeQuitar = !an && (esAdmin() || mio);
+    openModal(`
+      <h2 style="margin-top:0">${ent ? 'Entrada' : 'Gasto'} #${m.numero ?? ''} ${an ? '<span class="chip cancelado">Anulado</span>' : m.es_historial ? '<span class="chip historial">Historial</span>' : ''}</h2>
+      <div class="card"><div class="kv">
+        <div>Monto</div><div class="money big ${ent ? 'pos' : ''}">${ent ? '+' : '−'}${fmt(m.monto)}</div>
+        <div>Fecha</div><div>${fdate(m.fecha)}</div>
+        ${ent ? '' : `<div>Cargo</div><div>${esc(cargoNombre(m.cargo_id))}</div><div>Folio</div><div>${m.folio_numero ? esc(m.folio_numero) : '<span class="mut">Sin folio</span>'}</div>`}
+        <div>${ent ? 'Origen' : 'Proveedor'}</div><div>${esc(m.proveedor || '—')}</div>
+        <div>Concepto</div><div>${esc(m.concepto || '—')}</div>
+        ${m.nota ? `<div>Nota</div><div>${esc(m.nota)}</div>` : ''}
+        <div>Capturó</div><div>${esc(m.creado_por_nombre || '')}<div class="mut sm">${fdt(m.creado_en)}</div></div>
+        ${an ? `<div>Anulado por</div><div>${esc(m.anulado_por_nombre || '')}<div class="mut sm">${fdt(m.anulado_en)}</div></div><div>Motivo</div><div>${esc(m.motivo_anulacion || '')}</div>` : ''}
+      </div></div>
+      <h3>${ent ? 'Comprobantes' : 'Ticket / comprobante'}</h3>
+      <div class="card files">
+        ${arch.length ? arch.map(a => `<div class="row" style="margin-bottom:6px"><button class="lnk" data-act="abrir" data-path="${esc(a.path)}">${esc(a.nombre || 'archivo')}</button><span class="mut sm grow">${esc(a.subido_por_nombre || '')} · ${fdt(a.creado_en)}</span>${puedeQuitar ? `<button class="btn ghost sm" data-act="quitarfile" data-id="${a.id}" data-mov="${m.id}">Quitar</button>` : ''}</div>`).join('') : `<div class="mut">${sinComprobante(m) ? 'Se registró sin comprobante (ver nota).' : 'Sin archivos.'}</div>`}
+        ${!an ? `<div style="margin-top:8px"><button class="btn ghost sm" data-act="addfile" data-id="${m.id}">+ ${ent ? 'Agregar comprobante' : 'Agregar ticket'}</button></div>` : ''}
+      </div>
+      ${puedeAnular ? `<div class="row" style="margin:12px 0"><button class="btn bad" data-act="anular" data-id="${m.id}">Anular movimiento</button></div>` : ''}
+      <h3>Bitácora</h3><div>${(bit || []).map(b => `<div class="log"><b>${esc(b.accion.replace(/_/g, ' '))}</b> · ${esc(b.usuario_nombre || '')}<br><span class="mut">${fdt(b.creado_en)}</span></div>`).join('') || '<span class="mut">Sin registros</span>'}</div>`);
+  } catch (e) { openModal(`<div class="warnbox">${esc(errMsg(e))}</div>`); }
+}
+
+/* ===================== ARCHIVOS ===================== */
+function pickFiles(multiple = true) {
+  return new Promise(res => {
+    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*,application/pdf'; i.multiple = multiple;
+    i.onchange = () => res([...i.files]); i.click();
+  });
+}
+function pickCamara() {
+  return new Promise(res => {
+    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.setAttribute('capture', 'environment');
+    i.onchange = () => res([...i.files]); i.click();
+  });
+}
+function pickFuente() {
+  if (!(window.matchMedia && matchMedia('(pointer:coarse)').matches)) return pickFiles(true);
+  return new Promise(res => {
+    const files = []; const ov = document.createElement('div'); ov.className = 'overlay'; ov.style.zIndex = 70;
+    const cierra = r => { ov.remove(); res(r); };
+    const pinta = () => {
+      ov.innerHTML = `<div class="sheet"><h2 style="margin-top:0">Agregar ticket</h2>
+        <div class="row" style="flex-direction:column;gap:10px;align-items:stretch">
+          <button class="btn gold" id="fzCam">📷 Tomar foto ahora</button>
+          <button class="btn ghost" id="fzGal">Elegir de la galería o archivos</button></div>
+        ${files.length ? `<div class="mut sm" style="margin-top:12px">${files.length} archivo(s) listo(s). Si el ticket tiene varias hojas, toma una foto de cada una y toca “Listo”.</div>
+          <div class="thumbs">${files.map(f => f.type.startsWith('image/') ? `<img src="${URL.createObjectURL(f)}">` : `<span class="chip">${esc(f.name)}</span>`).join('')}</div>` : ''}
+        <div class="row" style="margin-top:14px"><button class="btn ok grow" id="fzOk" ${files.length ? '' : 'disabled'}>Listo${files.length ? ' (' + files.length + ')' : ''}</button><button class="btn ghost" id="fzNo">Cancelar</button></div></div>`;
+      ov.querySelector('#fzCam').onclick = async () => { const f = await pickCamara(); if (f.length) { files.push(...f); pinta(); } };
+      ov.querySelector('#fzGal').onclick = async () => { const f = await pickFiles(true); if (f.length) { files.push(...f); pinta(); } };
+      ov.querySelector('#fzOk').onclick = () => cierra(files);
+      ov.querySelector('#fzNo').onclick = () => cierra([]);
+    };
+    pinta(); document.body.appendChild(ov);
+  });
+}
+function loadImg(file, maxDim = 1800) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file); const im = new Image();
+    im.onload = () => {
+      let { width: w, height: h } = im; const k = Math.min(1, maxDim / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(im, 0, 0, w, h);
+      URL.revokeObjectURL(url); res({ data: cv.toDataURL('image/jpeg', 0.82), w, h });
+    };
+    im.onerror = () => rej(new Error('No se pudo leer la imagen.')); im.src = url;
+  });
+}
+async function filesToPdf(files) {
+  if (files.length === 1 && files[0].type === 'application/pdf') return files[0];
+  if (files.some(f => f.type === 'application/pdf')) throw new Error('No mezcles PDFs con fotos: sube el PDF solo.');
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit: 'mm', format: 'a4' }); let first = true;
+  for (const f of files) {
+    const im = await loadImg(f); if (!first) doc.addPage(); first = false;
+    const pw = 210, ph = 297, m = 8, r = Math.min((pw - 2 * m) / im.w, (ph - 2 * m) / im.h);
+    doc.addImage(im.data, 'JPEG', m + ((pw - 2 * m) - im.w * r) / 2, m, im.w * r, im.h * r);
+  }
+  return doc.output('blob');
+}
+async function subirArchivo(movId, files) {
+  const blob = await filesToPdf(files);
+  const path = `caja/${movId}/ticket-${Date.now()}.pdf`;
+  const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf' });
+  if (up.error) throw up.error;
+  const nombre = files.length === 1 ? files[0].name.replace(/\.(jpe?g|png|webp|heic)$/i, '.pdf') : `ticket-${files.length}-fotos.pdf`;
+  await rpc('caja_registrar_archivo', { p_mov: movId, p_path: path, p_nombre: nombre });
+}
+async function abrirPath(path) {
+  const w = window.open('', '_blank');
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 300);
+  if (error) { if (w) w.close(); return toast(errMsg(error), 'err'); }
+  if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+}
+
+/* ===================== VISTA: NUEVO ===================== */
+function nuevaClave() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()); }
+async function viewNuevo(opts) {
+  const tipo = (opts && opts.tipo) || (S.F && S.F.tipo) || 'gasto';
+  S.F = { tipo, files: [], clave: nuevaClave(), folioDup: '', enviando: false };
+  $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
+  try { await loadSaldo(); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+  pintaForm();
+}
+function pintaForm() {
+  const F = S.F, g = F.tipo === 'gasto';
+  $('#view').innerHTML = `
+    <div class="pagehead"><h2>Nuevo movimiento</h2><span class="sub">Saldo actual: <b>${fmt(S.saldo.saldo)}</b></span></div>
+    <div class="seg"><button class="g ${g ? 'on' : ''}" data-act="tipo" data-tipo="gasto">− Gasto</button><button class="e ${!g ? 'on' : ''}" data-act="tipo" data-tipo="entrada">+ Entrada</button></div>
+    <div class="card">
+      <div class="grid2"><div><label class="f">Fecha</label><input type="date" id="fFecha" value="${today()}" max="${today()}"></div>
+        <div><label class="f">Monto</label><input type="text" id="fMonto" inputmode="decimal" placeholder="0.00" autocomplete="off"></div></div>
+      ${g ? `
+        <label class="f">Cargo (a quién se le carga)</label>
+        <select id="fCargo"><option value="">— Elige —</option>${S.cargos.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select>
+        <div class="grid2"><div><label class="f">Folio (opcional)</label><input type="text" id="fFolio" autocomplete="off" placeholder="Solo si ya tiene"></div>
+          <div><label class="f">Proveedor / comercio</label><input type="text" id="fProv" autocomplete="off"></div></div>
+        <div id="folioMsg"></div>
+        <label class="f">Concepto (en qué se gastó)</label><input type="text" id="fConc" autocomplete="off" placeholder="Ej. GASOLINA, COMIDA OBRA, PAPELERÍA…">
+        <label class="f">Nota (opcional)</label><textarea id="fNota" style="min-height:52px"></textarea>
+        <h3>Ticket / comprobante</h3>
+        <div id="ticketBox"></div>`
+      : `
+        <label class="f">De dónde viene el efectivo</label><input type="text" id="fConc" autocomplete="off" placeholder="Ej. REPOSICIÓN DE CAJA, DEPÓSITO DE…">
+        <label class="f">Entregó / origen (opcional)</label><input type="text" id="fProv" autocomplete="off">
+        <label class="f">Nota (opcional)</label><textarea id="fNota" style="min-height:52px"></textarea>
+        <h3>Comprobante (opcional)</h3><div id="ticketBox"></div>`}
+    </div>
+    <button class="btn ${g ? 'gold' : 'ok'} bigbtn" data-act="revisar">Revisar y guardar</button>`;
+  pintaTicket();
+  if (g) {
+    const ck = () => revisaFolio();
+    $('#fFolio').onblur = ck; $('#fCargo').onchange = ck; $('#fFolio').oninput = () => { F.folioDup = ''; $('#folioMsg').innerHTML = ''; };
+  }
+}
+function pintaTicket() {
+  const F = S.F, g = F.tipo === 'gasto', box = $('#ticketBox'); if (!box) return;
+  box.innerHTML = `
+    <button class="btn ghost" data-act="pickticket" style="width:100%">📷 ${F.files.length ? 'Agregar más fotos' : (g ? 'Tomar foto / subir ticket' : 'Tomar foto / subir comprobante')}</button>
+    <div class="mut sm" id="tkInfo" style="margin-top:6px">${F.files.length ? F.files.length + ' archivo(s) listo(s) para subir' : (g ? 'Obligatorio, salvo que marques que no hay comprobante.' : 'Sin adjuntar')}</div>
+    ${F.files.length ? `<div class="thumbs">${F.files.map(f => f.type.startsWith('image/') ? `<img src="${URL.createObjectURL(f)}">` : `<span class="chip">${esc(f.name)}</span>`).join('')}</div><div style="margin-top:6px"><button class="btn ghost sm" data-act="limpiarticket">Quitar fotos</button></div>` : ''}
+    ${g && !F.files.length ? `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px"><input type="checkbox" id="fSinT" ${F.sinT ? 'checked' : ''} data-act="sint"> No hay comprobante (explícalo)</label>
+      ${F.sinT ? `<input type="text" id="fMotivoT" placeholder="¿Por qué no hay ticket?" value="${esc(F.motivoT || '')}" style="margin-top:6px">` : ''}` : ''}`;
+}
+async function revisaFolio() {
+  const F = S.F; const cargo = Number($('#fCargo')?.value || 0), folio = ($('#fFolio')?.value || '').trim().toUpperCase();
+  F.folioDup = ''; const box = $('#folioMsg'); if (box) box.innerHTML = '';
+  if (!cargo || !folio) return;
+  const [a, b] = await Promise.all([
+    sb.from('cheque_folios').select('cheque_id,folio_numero').eq('cargo_id', cargo).eq('folio_numero', folio).eq('activo', true),
+    sb.from('caja_movimientos').select('numero,folio_numero').eq('cargo_id', cargo).eq('folio_numero', folio).eq('tipo', 'gasto').eq('estatus', 'vigente')]);
+  if ((a.data || []).length) F.folioDup = `El folio ${folio} de ${cargoNombre(cargo)} ya se usó en un cheque.`;
+  else if ((b.data || []).length) F.folioDup = `El folio ${folio} de ${cargoNombre(cargo)} ya se usó en otro gasto de la caja.`;
+  if (box && F.folioDup) box.innerHTML = `<div class="warnbox">${esc(F.folioDup)} No se puede repetir.</div>`;
+}
+function leeForm() {
+  const F = S.F, g = F.tipo === 'gasto';
+  const monto = parseMoney($('#fMonto').value);
+  return { tipo: F.tipo, fecha: $('#fFecha').value, monto, cargo: g ? Number($('#fCargo').value || 0) : null,
+    folio: g ? ($('#fFolio').value.trim().toUpperCase() || null) : null, proveedor: ($('#fProv').value.trim().toUpperCase() || null),
+    concepto: $('#fConc').value.trim().toUpperCase(), nota: ($('#fNota').value.trim().toUpperCase() || null),
+    sinT: g && !F.files.length && !!$('#fSinT')?.checked, motivoT: ($('#fMotivoT')?.value || '').trim().toUpperCase() };
+}
+async function revisar() {
+  const F = S.F; if (F.enviando) return; const d = leeForm(), g = d.tipo === 'gasto';
+  const err = [];
+  if (!d.fecha) err.push('Falta la fecha.'); else if (d.fecha > today()) err.push('La fecha no puede ser futura.');
+  if (!(d.monto > 0)) err.push('Escribe un monto mayor a cero.'); else if (Math.abs(d.monto * 100 - Math.round(d.monto * 100)) > 1e-6) err.push('El monto solo puede tener 2 decimales.');
+  if (g && !d.cargo) err.push('Elige el cargo.');
+  if (!d.concepto) err.push(g ? 'Escribe el concepto del gasto.' : 'Escribe de dónde viene el efectivo.');
+  if (g && !F.files.length && !d.sinT) err.push('Sube la foto del ticket (o marca que no hay comprobante).');
+  if (g && d.sinT && !d.motivoT) err.push('Explica por qué no hay ticket.');
+  if (g) { await revisaFolio(); if (F.folioDup) err.push(F.folioDup); if (d.monto > S.saldo.saldo) err.push(`No alcanza el efectivo: hay ${fmt(S.saldo.saldo)} en caja.`); }
+  if (err.length) return toast(err[0], 'err');
+  // posibles duplicados
+  let dup = [];
+  try {
+    const r = await sb.from('caja_movimientos').select('numero,proveedor,concepto,creado_por_nombre').eq('tipo', d.tipo).eq('fecha', d.fecha).eq('monto', d.monto).eq('estatus', 'vigente');
+    dup = r.data || [];
+  } catch (e) {}
+  const nuevoSaldo = g ? S.saldo.saldo - d.monto : S.saldo.saldo + d.monto;
+  F.d = d;
+  openModal(`<h2 style="margin-top:0">Confirma ${g ? 'el gasto' : 'la entrada'}</h2>
+    <div class="card"><div class="kv">
+      <div>Monto</div><div class="money big ${g ? '' : 'pos'}">${g ? '−' : '+'}${fmt(d.monto)}</div>
+      <div>Fecha</div><div>${fdate(d.fecha)}</div>
+      ${g ? `<div>Cargo</div><div class="b">${esc(cargoNombre(d.cargo))}</div><div>Folio</div><div>${d.folio ? esc(d.folio) : '<span class="mut">Sin folio</span>'}</div>` : ''}
+      <div>${g ? 'Proveedor' : 'Origen'}</div><div>${esc(d.proveedor || '—')}</div>
+      <div>Concepto</div><div>${esc(d.concepto)}</div>
+      <div>${g ? 'Ticket' : 'Comprobante'}</div><div>${F.files.length ? F.files.length + ' archivo(s)' : (d.sinT ? 'Sin comprobante: ' + esc(d.motivoT) : '—')}</div>
+      <div>Saldo después</div><div class="money">${fmt(nuevoSaldo)}</div></div></div>
+    ${dup.length ? `<div class="warnbox"><b>Ojo:</b> ya hay ${dup.length} ${d.tipo} vigente(s) con la misma fecha y el mismo monto (${dup.map(x => '#' + x.numero + ' ' + esc(x.proveedor || x.concepto || '')).join(', ')}). Verifica que no estés duplicando.</div>` : ''}
+    <div class="row" style="margin-top:12px"><button class="btn ${g ? 'gold' : 'ok'} grow" id="btnGuardar" data-act="guardar">Guardar</button><button class="btn ghost" data-act="close">Corregir</button></div>`);
+}
+async function guardar() {
+  const F = S.F; if (F.enviando || !F.d) return; F.enviando = true;
+  const b = $('#btnGuardar'); if (b) { b.disabled = true; b.textContent = 'Guardando…'; }
+  const d = F.d, g = d.tipo === 'gasto';
+  const notaTxt = d.sinT ? ['SIN COMPROBANTE: ' + d.motivoT, d.nota].filter(Boolean).join(' · ') : (d.nota || null);
+  try {
+    const mov = await rpc('caja_registrar', { p: { tipo: d.tipo, fecha: d.fecha, monto: d.monto, cargo_id: g ? d.cargo : null, folio_numero: d.folio, proveedor: d.proveedor,
+      concepto: d.concepto, nota: notaTxt, clave_submision: F.clave } });
+    let aviso = '';
+    if (F.files.length && !mov.duplicado) {
+      try { await subirArchivo(mov.id, F.files); } catch (e) { aviso = 'El movimiento se guardó, pero NO se pudo subir el ticket (' + errMsg(e) + '). Ábrelo y agrégalo.'; }
+    }
+    closeModal(); S.F = null;
+    if (aviso) { toast(aviso, 'err'); go('mov'); setTimeout(() => openDetail(mov.id), 300); }
+    else { toast(g ? 'Gasto guardado.' : 'Entrada guardada.', 'ok'); go('caja'); }
+  } catch (e) {
+    F.enviando = false; closeModal(); toast(errMsg(e), 'err');
+  }
+}
+
+/* ===================== VISTA: ARQUEO ===================== */
+async function viewArq() {
+  $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
+  try {
+    const sd = await loadSaldo();
+    const aqs = (await sb.from('caja_arqueos').select('*').order('creado_en', { ascending: false }).limit(30)).data || [];
+    $('#view').innerHTML = `<div class="pagehead"><h2>Arqueo de caja</h2><span class="sub">Cuenta el efectivo y compáralo con el sistema</span></div>
+      <div class="card">
+        <div class="row"><div class="grow"><div class="mut sm">Saldo según el sistema</div><div class="money big">${fmt(sd.saldo)}</div></div></div>
+        <label class="f">Efectivo contado físicamente</label><input type="text" id="aqMonto" inputmode="decimal" placeholder="0.00" autocomplete="off">
+        <div id="aqDif" style="margin-top:8px"></div>
+        <label class="f">Nota (obligatoria si hay diferencia)</label><textarea id="aqNota" style="min-height:52px"></textarea>
+        <button class="btn bigbtn" style="margin-top:12px" data-act="arqueo">Registrar arqueo</button>
+      </div>
+      <h3>Arqueos anteriores</h3>
+      ${aqs.length ? aqs.map(a => `<div class="card"><div class="row"><div class="grow"><div class="b">${fdate(a.fecha)}</div><div class="mut sm">${esc(a.creado_por_nombre || '')} · ${fdt(a.creado_en)}</div>${a.nota ? `<div class="sm" style="margin-top:4px">${esc(a.nota)}</div>` : ''}</div>
+        <div class="r"><div class="sm mut">Sistema ${fmt(a.saldo_sistema)}</div><div class="sm mut">Contado ${fmt(a.efectivo_contado)}</div>
+        <div class="b ${cents(a.diferencia) === 0 ? 'pos' : 'neg'}">${cents(a.diferencia) === 0 ? 'Cuadra' : 'Dif. ' + fmt(a.diferencia)}</div></div></div></div>`).join('') : `<div class="card empty">${ICON.empty}<div>Aún no hay arqueos.</div></div>`}`;
+    $('#aqMonto').oninput = () => {
+      const v = parseMoney($('#aqMonto').value); const el = $('#aqDif');
+      if (isNaN(v)) return el.innerHTML = '';
+      const dif = (cents(v) - cents(sd.saldo)) / 100;
+      el.innerHTML = dif === 0 ? `<div class="okbox">Cuadra: no hay diferencia.</div>` : `<div class="warnbox">Diferencia: <b>${fmt(dif)}</b> (${dif > 0 ? 'sobra' : 'falta'} efectivo). Explica el motivo en la nota.</div>`;
+    };
+    S._saldoArq = sd.saldo;
+  } catch (e) { $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+}
+
+/* ===================== VISTA: BITACORA ===================== */
+async function viewBit() {
+  $('#view').innerHTML = `<div class="pagehead"><h2>Bitácora de caja</h2><span class="sub">Registro permanente; no se puede borrar ni editar</span></div><div id="bitList" class="spin">Cargando…</div>`;
+  const { data, error } = await sb.from('caja_bitacora').select('*').order('creado_en', { ascending: false }).limit(150);
+  if (error) return $('#bitList').innerHTML = `<div class="warnbox">${esc(errMsg(error))}</div>`;
+  $('#bitList').className = '';
+  $('#bitList').innerHTML = (data || []).map(b => {
+    const d = b.detalle || {}; let x = '';
+    if (d.monto != null) x += ' · ' + fmt(d.monto);
+    if (d.motivo) x += ' · ' + esc(d.motivo);
+    if (b.accion === 'arqueo') x = ` · sistema ${fmt(d.saldo)} · contado ${fmt(d.contado)}`;
+    return `<div class="log"><b>${esc(b.accion.replace(/_/g, ' '))}</b>${x} · ${esc(b.usuario_nombre || '')}<br><span class="mut">${fdt(b.creado_en)}</span>${b.movimiento_id ? ` · <a href="#" data-act="detalle" data-id="${b.movimiento_id}" style="color:var(--navy2)">ver movimiento</a>` : ''}</div>`;
+  }).join('') || `<div class="card empty">${ICON.empty}<div>Sin registros.</div></div>`;
+}
+
+/* ===================== CUENTA / RESPALDO ===================== */
+function menuCuenta() {
+  openModal(`<h2 style="margin-top:0">Mi cuenta</h2><div class="card"><div class="b">${esc(S.perfil.nombre)}</div><div class="mut">${esc(S.perfil.correo)} · ${esc(rolTxt(S.perfil.rol))}</div></div>
+  <h3>Control de Cheques</h3><a class="btn ghost" href="https://jocris-sistemas.github.io/Control-Cheques/" style="text-decoration:none">Ir a Control de Cheques</a>
+  <h3>Cambiar contraseña</h3><label class="f">Nueva contraseña (mínimo 8 caracteres)</label>${pwField('np1', 'new-password')}<label class="f">Repítela</label>${pwField('np2', 'new-password')}
+  <div class="row" style="margin-top:12px"><button class="btn" data-act="cambiarpass">Guardar contraseña</button><button class="btn ghost" data-act="salir">Cerrar sesión</button></div>
+  <h3>Respaldo</h3><div class="mut sm" style="margin-bottom:6px">Descarga todos los movimientos, arqueos y la bitácora de la caja en un Excel.</div><button class="btn ghost" id="btnRespaldo" data-act="respaldo">Descargar respaldo en Excel</button>`);
+}
+function cargarSheetJS() {
+  return new Promise((res, rej) => {
+    if (window.XLSX) return res();
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar el generador de Excel. Revisa tu internet.')); document.head.appendChild(s);
+  });
+}
+async function traerTodo(tabla, orden) {
+  let all = [], from = 0;
+  for (;;) {
+    const { data, error } = await sb.from(tabla).select('*').order(orden, { ascending: true }).range(from, from + 999);
+    if (error) throw error; all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
+  }
+  return all;
+}
+async function respaldoExcel() {
+  const b = $('#btnRespaldo'); if (b) { b.disabled = true; b.textContent = 'Preparando…'; }
+  try {
+    await cargarSheetJS();
+    const [mov, arq, bit] = await Promise.all([traerTodo('caja_movimientos', 'numero'), traerTodo('caja_arqueos', 'creado_en'), traerTodo('caja_bitacora', 'id')]);
+    const arch = await traerTodo('caja_archivos', 'creado_en');
+    const nFiles = {}; arch.filter(a => a.activo).forEach(a => nFiles[a.movimiento_id] = (nFiles[a.movimiento_id] || 0) + 1);
+    const wb = XLSX.utils.book_new();
+    const sheet = (rows, name) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ info: 'Sin datos' }]), name);
+    sheet(mov.map(m => ({ Numero: m.numero, Tipo: m.tipo, Fecha: m.fecha, Monto: Number(m.monto), Cargo: m.cargo_id ? cargoNombre(m.cargo_id) : '', Folio: m.folio_numero || '', Proveedor: m.proveedor || '', Concepto: m.concepto || '', Nota: m.nota || '',
+      Estatus: m.estatus, Historial: m.es_historial ? 'SI' : '', 'Archivos': nFiles[m.id] || 0, 'Capturo': m.creado_por_nombre || '', 'Capturado en': m.creado_en, 'Motivo anulacion': m.motivo_anulacion || '', 'Anulado por': m.anulado_por_nombre || '' })), 'Movimientos');
+    sheet(arq.map(a => ({ Fecha: a.fecha, 'Saldo sistema': Number(a.saldo_sistema), 'Efectivo contado': Number(a.efectivo_contado), Diferencia: Number(a.diferencia), Nota: a.nota || '', Por: a.creado_por_nombre || '', 'Registrado en': a.creado_en })), 'Arqueos');
+    sheet(bit.map(x => ({ Fecha: x.creado_en, Usuario: x.usuario_nombre || '', Accion: x.accion, Detalle: x.detalle ? JSON.stringify(x.detalle) : '' })), 'Bitacora');
+    XLSX.writeFile(wb, `Respaldo_Caja_Jocris_${today()}.xlsx`);
+    toast('Respaldo descargado.', 'ok');
+  } catch (e) { toast(errMsg(e), 'err'); }
+  finally { const b2 = $('#btnRespaldo'); if (b2) { b2.disabled = false; b2.textContent = 'Descargar respaldo en Excel'; } }
+}
+
+/* ===================== EVENTOS ===================== */
+document.addEventListener('input', ev => {
+  const el = ev.target; if (!el.matches || !el.matches('input[type=text], textarea')) return;
+  const v = el.value, u = v.toUpperCase(); if (v === u) return;
+  const a = el.selectionStart, b = el.selectionEnd; el.value = u; try { el.setSelectionRange(a, b); } catch (e) {}
+}, true);
+document.addEventListener('change', ev => {
+  const el = ev.target;
+  if (el.id === 'fSinT' && S.F) { S.F.sinT = el.checked; S.F.motivoT = ''; pintaTicket(); }
+  if (el.id === 'fMotivoT' && S.F) S.F.motivoT = el.value;
+});
+document.addEventListener('click', async ev => {
+  const tabBtn = ev.target.closest('nav.tabs button'); if (tabBtn) return go(tabBtn.dataset.tab);
+  const goBtn = ev.target.closest('[data-tab-go]'); if (goBtn) return go(goBtn.dataset.tabGo);
+  const el = ev.target.closest('[data-act]'); if (!el) return; const act = el.dataset.act, id = el.dataset.id;
+  if (el.tagName === 'A') ev.preventDefault();
+  try {
+    switch (act) {
+      case 'ovl': if (ev.target === el) closeModal(); break;
+      case 'close': closeModal(); break;
+      case 'menu': menuCuenta(); break;
+      case 'salir': await sb.auth.signOut(); S.perfil = null; closeModal(); renderLogin(); break;
+      case 'verpass': { const i = document.getElementById(el.dataset.for); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; el.innerHTML = show ? EYE_OFF : EYE; break; }
+      case 'cambiarpass': {
+        const a = $('#np1').value, b = $('#np2').value;
+        if (a.length < 8) return toast('La contraseña debe tener al menos 8 caracteres.', 'err');
+        if (a !== b) return toast('Las contraseñas no coinciden.', 'err');
+        const { error } = await sb.auth.updateUser({ password: a }); if (error) throw error; toast('Contraseña actualizada.', 'ok'); closeModal(); break;
+      }
+      case 'respaldo': await respaldoExcel(); break;
+      case 'nuevo': go('nuevo', { tipo: el.dataset.tipo }); break;
+      case 'faltantes': go('mov', { sinTicket: true }); break;
+      case 'quitarfaltan': S._soloFaltan = false; viewMov({ keep: true }); break;
+      case 'mas': S.page++; await loadMov(); break;
+      case 'detalle': closeModal(); await openDetail(id); break;
+      case 'abrir': await abrirPath(el.dataset.path); break;
+      case 'tipo': if (S.F) { const keepFiles = S.F.files; S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); } break;
+      case 'pickticket': { const fs = await pickFuente(); if (fs.length) { S.F.files = S.F.files.concat(fs); pintaTicket(); } break; }
+      case 'limpiarticket': S.F.files = []; pintaTicket(); break;
+      case 'revisar': await revisar(); break;
+      case 'guardar': await guardar(); break;
+      case 'addfile': {
+        const fs = await pickFuente(); if (!fs.length) break; toast('Subiendo…');
+        await subirArchivo(id, fs); toast('Archivo agregado.', 'ok'); await openDetail(id); break;
+      }
+      case 'quitarfile': {
+        const mot = prompt('¿Por qué quitas este archivo? (queda registrado)'); if (!mot || !mot.trim()) break;
+        await rpc('caja_quitar_archivo', { p_archivo: id, p_motivo: mot.trim().toUpperCase() }); toast('Archivo quitado.', 'ok'); await openDetail(el.dataset.mov); break;
+      }
+      case 'anular': {
+        openModal(`<h2 style="margin-top:0">Anular movimiento</h2><div class="warnbox">El movimiento no se borra: queda marcado como anulado, con tu nombre y el motivo, y el saldo se corrige.</div>
+          <label class="f">Motivo (obligatorio)</label><textarea id="anMot"></textarea>
+          <div class="row" style="margin-top:12px"><button class="btn bad grow" data-act="anular2" data-id="${id}">Anular</button><button class="btn ghost" data-act="detalle" data-id="${id}">Volver</button></div>`);
+        break;
+      }
+      case 'anular2': {
+        const mot = $('#anMot').value.trim().toUpperCase(); if (!mot) return toast('Escribe el motivo.', 'err');
+        el.disabled = true; await rpc('caja_anular', { p_id: id, p_motivo: mot }); closeModal(); toast('Movimiento anulado.', 'ok'); go(S.tab); break;
+      }
+      case 'arqueo': {
+        const v = parseMoney($('#aqMonto').value); if (isNaN(v) || v < 0) return toast('Escribe el efectivo contado.', 'err');
+        const nota = $('#aqNota').value.trim().toUpperCase();
+        if (cents(v) !== cents(S._saldoArq) && !nota) return toast('Hay diferencia: escribe una nota que la explique.', 'err');
+        el.disabled = true;
+        await rpc('caja_arqueo', { p_contado: v, p_nota: nota || null }); toast('Arqueo registrado.', 'ok'); viewArq(); break;
+      }
+    }
+  } catch (e) { toast(errMsg(e), 'err'); if (el && el.disabled) el.disabled = false; }
+});
+sb.auth.onAuthStateChange((ev, session) => { if (ev === 'SIGNED_OUT' && S.perfil) { S.perfil = null; renderLogin(); } });
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(() => {});
+boot().catch(e => renderLogin('No se pudo cargar: ' + errMsg(e)));
+</script>
+</body>
+</html>
