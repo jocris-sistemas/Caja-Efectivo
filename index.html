@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Caja">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Caja de Efectivo · Jocris</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 
@@ -205,6 +205,7 @@ const SUPABASE_URL = 'https://hbttxvanyqczspljtqpz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_J4abyTF0BPq47eBTVLjIFQ_5-x2HOiJ';
 const BUCKET = 'cheques-archivos';
 const PAGE = 40;
+if (!window.supabase) { document.addEventListener('DOMContentLoaded', () => { const a = document.getElementById('app'); if (a) a.innerHTML = '<div class="login"><div class="box"><div class="warnbox">No hay conexión a internet. Conéctate y vuelve a abrir la app.</div><button class="btn gold" onclick="location.reload()">Reintentar</button></div></div>'; }); throw new Error('Sin conexión: no cargó supabase-js'); }
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 /* ===================== ESTADO ===================== */
@@ -253,6 +254,7 @@ const EYE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke=
 const EYE_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 const pwField = (id, ac) => `<div class="pw"><input type="password" id="${id}" autocomplete="${ac}" autocapitalize="off" autocorrect="off" spellcheck="false" data-nocaps required><button type="button" class="eye" data-act="verpass" data-for="${id}" aria-label="Mostrar u ocultar contraseña">${EYE}</button></div>`;
 function renderLogin(msg = '') {
+  try { closeModal(); } catch (e) { } document.querySelectorAll('body > .overlay').forEach(o => o.remove());
   $('#app').innerHTML = `
   <div class="login">
     <div class="logo"><b>JOCRIS</b><span>Caja de Efectivo</span></div>
@@ -284,11 +286,13 @@ function renderLogin(msg = '') {
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return renderLogin();
-  const { data: p } = await sb.from('perfiles').select('*').eq('id', session.user.id).maybeSingle();
+  const { data: p, error: pe } = await sb.from('perfiles').select('*').eq('id', session.user.id).maybeSingle();
+  if (pe) { $('#app').innerHTML = `<div class="login"><div class="logo"><b>JOCRIS</b><span>Caja de Efectivo</span></div><div class="box"><div class="warnbox">No hay conexión con el servidor. Revisa tu internet.</div><button class="btn gold grow" id="btnRetry">Reintentar</button></div></div>`; $('#btnRetry').onclick = () => { $('#app').innerHTML = '<div class="spin">Cargando…</div>'; boot().catch(() => boot()); }; return; }
   if (!p || !p.activo) { await sb.auth.signOut(); return renderLogin('Tu usuario no está activo en el sistema. Avísale a Pedro.'); }
   S.perfil = p;
   $('#app').innerHTML = '<div class="spin">Cargando…</div>';
   const c = await sb.from('cargos').select('*').eq('activo', true).order('id');
+  if (c.error) throw c.error;
   S.cargos = (c.data || []).filter(x => x.nombre !== 'SIN CARGO');
   S.tab = 'caja';
   renderShell();
@@ -321,7 +325,7 @@ async function loadSaldo() { S.saldo = await rpc('caja_saldo'); return S.saldo; 
 function itemMov(m) {
   const ent = m.tipo === 'entrada', an = m.estatus === 'anulado';
   const titulo = ent ? (m.concepto || 'ENTRADA DE EFECTIVO') : (m.proveedor || m.concepto || '—');
-  const sub = ent ? (m.proveedor ? m.proveedor : '') : `${cargoNombre(m.cargo_id)}${m.folio_numero ? ' · FOLIO ' + esc(m.folio_numero) : ''}${m.proveedor && m.concepto ? ' · ' + esc(m.concepto) : ''}`;
+  const sub = ent ? esc(m.proveedor || '') : `${esc(cargoNombre(m.cargo_id))}${m.folio_numero ? ' · FOLIO ' + esc(m.folio_numero) : ''}${m.proveedor && m.concepto ? ' · ' + esc(m.concepto) : ''}`;
   const sinT = !ent && !an && !m.es_historial && !archAct(m).length && !sinComprobante(m);
   return `<div class="item t-${m.tipo} ${an ? 'an' : ''}" data-act="detalle" data-id="${m.id}">
     <div class="main"><div class="hl">${esc(titulo)}</div><div class="hl2" style="font-size:14px">${sub}</div>
@@ -344,6 +348,7 @@ async function viewCaja() {
     const arr = Object.entries(porCargo).sort((a, b) => b[1] - a[1]); const mx = arr.length ? arr[0][1] : 1;
     const rec = (await sb.from('caja_movimientos').select(SEL).order('creado_en', { ascending: false }).limit(8)).data || [];
     const sinT = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(300)).data || [];
+    if (S.tab !== 'caja') return;
     const faltan = sinT.filter(x => !archAct(x).length && !sinComprobante(x));
     const aq = sd.arqueo;
     const aqTxt = aq ? (cents(aq.diferencia) === 0 ? `<span class="pos">sin diferencia</span>` : `<span class="neg">diferencia ${fmt(aq.diferencia)}</span>`) : '';
@@ -384,11 +389,13 @@ async function viewMov(opts) {
 }
 async function cargarMeses() {
   const r = await sb.from('caja_movimientos').select('fecha').order('fecha', { ascending: false }).limit(5000);
+  if (S.tab !== 'mov') return;
   const set = [...new Set((r.data || []).map(x => String(x.fecha).slice(0, 7)))].sort().reverse();
   S.meses = set; const el = $('#fmes'); if (!el) return;
   el.innerHTML = `<option value="">Todos los meses</option>` + set.map(m => `<option value="${m}" ${S.filt.mes === m ? 'selected' : ''}>${esc(mesTxt(m))}</option>`).join('');
 }
 async function loadMov() {
+  const tok = S.movTok = (S.movTok || 0) + 1;
   const box = $('#movList'); if (!box) return;
   let q = sb.from('caja_movimientos').select(SEL, { count: 'exact' });
   const f = S.filt;
@@ -397,8 +404,9 @@ async function loadMov() {
   if (f.mes) { const [y, m] = f.mes.split('-').map(Number); q = q.gte('fecha', f.mes + '-01').lt('fecha', m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`); }
   if (f.q) { const t = f.q.replace(/[,()%]/g, ' '); q = q.or(`proveedor.ilike.%${t}%,concepto.ilike.%${t}%,folio_numero.ilike.%${t}%`); }
   if (S._soloFaltan) q = q.eq('tipo', 'gasto').eq('estatus', 'vigente').eq('es_historial', false);
-  q = q.order('fecha', { ascending: false }).order('numero', { ascending: false }).range(S.page * PAGE, S.page * PAGE + PAGE - 1);
+  q = q.order('fecha', { ascending: false }).order('numero', { ascending: false }).order('id', { ascending: false }).range(S.page * PAGE, S.page * PAGE + PAGE - 1);
   const { data, count, error } = await q;
+  if (tok !== S.movTok || !$('#movList')) return;
   if (error) return box.innerHTML = `<div class="warnbox">${esc(errMsg(error))}</div>`;
   let rows = data || [];
   if (S._soloFaltan) rows = rows.filter(x => !archAct(x).length && !sinComprobante(x));
@@ -522,6 +530,7 @@ async function viewNuevo(opts) {
   S.F = { tipo, files: [], clave: nuevaClave(), folioDup: '', enviando: false };
   $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
   try { await loadSaldo(); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+  if (S.tab !== 'nuevo' || !S.F) return;
   pintaForm();
 }
 function pintaForm() {
@@ -623,7 +632,7 @@ async function guardar() {
     const mov = await rpc('caja_registrar', { p: { tipo: d.tipo, fecha: d.fecha, monto: d.monto, cargo_id: g ? d.cargo : null, folio_numero: d.folio, proveedor: d.proveedor,
       concepto: d.concepto, nota: notaTxt, clave_submision: F.clave } });
     let aviso = '';
-    if (F.files.length && !mov.duplicado) {
+    if (F.files.length && !(mov.duplicado && (mov.caja_archivos || []).some(a => a.activo))) {
       try { await subirArchivo(mov.id, F.files); } catch (e) { aviso = 'El movimiento se guardó, pero NO se pudo subir el ticket (' + errMsg(e) + '). Ábrelo y agrégalo.'; }
     }
     closeModal(); S.F = null;
@@ -640,6 +649,7 @@ async function viewArq() {
   try {
     const sd = await loadSaldo();
     const aqs = (await sb.from('caja_arqueos').select('*').order('creado_en', { ascending: false }).limit(30)).data || [];
+    if (S.tab !== 'arq') return;
     $('#view').innerHTML = `<div class="pagehead"><h2>Arqueo de caja</h2><span class="sub">Cuenta el efectivo y compáralo con el sistema</span></div>
       <div class="card">
         <div class="row"><div class="grow"><div class="mut sm">Saldo según el sistema</div><div class="money big">${fmt(sd.saldo)}</div></div></div>
@@ -674,7 +684,7 @@ async function cargarHist(force) {
   let all = [], from = 0;
   for (;;) {
     const { data, error } = await sb.from('caja_historial_semanal').select('semana,orden,folio,grupo,concepto,importe,nota')
-      .order('semana', { ascending: true }).order('orden', { ascending: true }).range(from, from + 999);
+      .order('semana', { ascending: true }).order('orden', { ascending: true }).order('id', { ascending: true }).range(from, from + 999);
     if (error) throw error;
     all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
   }
@@ -691,6 +701,7 @@ const lineaSem = (r, conSemana) => `<div class="sl"><div class="c">${esc(r.conce
 async function viewSem() {
   $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
   try { await cargarHist(); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+  if (S.tab !== 'sem') return;
   if (!S.semanas.length) return $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal</h2></div><div class="card empty">${ICON.empty}<div>Todavía no hay historial cargado.</div></div>`;
   const w = S.semSel && S.semanas.find(x => x.semana === S.semSel);
   if (w) return viewSemDet(w);
@@ -698,7 +709,7 @@ async function viewSem() {
   const mxW = S.semanas.reduce((a, x) => x.c > a.c ? x : a), mnW = S.semanas.reduce((a, x) => x.c < a.c ? x : a);
   const gy = {}; S.hist.forEach(r => { const k = r.grupo || 'OTROS'; gy[k] = (gy[k] || 0) + cents(r.importe); });
   const garr = Object.entries(gy).sort((a, b) => b[1] - a[1]); const gmx = garr[0][1];
-  const anio = S.semanas[0].semana.slice(0, 4);
+  const anios = [...new Set(S.semanas.map(x => x.semana.slice(0, 4)))].sort(); const anio = anios.length > 1 ? anios[0] + '–' + anios[anios.length - 1] : anios[0];
   let html = '', lastM = '';
   const mxc = mxW.c;
   S.semanas.forEach(x => {
@@ -765,6 +776,7 @@ async function semExcel(semana) {
 async function viewBit() {
   $('#view').innerHTML = `<div class="pagehead"><h2>Bitácora de caja</h2><span class="sub">Registro permanente; no se puede borrar ni editar</span></div><div id="bitList" class="spin">Cargando…</div>`;
   const { data, error } = await sb.from('caja_bitacora').select('*').order('creado_en', { ascending: false }).limit(150);
+  if (S.tab !== 'bit' || !$('#bitList')) return;
   if (error) return $('#bitList').innerHTML = `<div class="warnbox">${esc(errMsg(error))}</div>`;
   $('#bitList').className = '';
   $('#bitList').innerHTML = (data || []).map(b => {
@@ -794,7 +806,7 @@ function cargarSheetJS() {
 async function traerTodo(tabla, orden) {
   let all = [], from = 0;
   for (;;) {
-    const { data, error } = await sb.from(tabla).select('*').order(orden, { ascending: true }).range(from, from + 999);
+    const { data, error } = await sb.from(tabla).select('*').order(orden, { ascending: true }).order('id', { ascending: true }).range(from, from + 999);
     if (error) throw error; all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
   }
   return all;
@@ -819,11 +831,14 @@ async function respaldoExcel() {
 }
 
 /* ===================== EVENTOS ===================== */
-document.addEventListener('input', ev => {
+const aMayus = ev => {
+  if (ev.isComposing) return;
   const el = ev.target; if (!el.matches || !el.matches('input[type=text], textarea') || el.hasAttribute('data-nocaps')) return;
   const v = el.value, u = v.toUpperCase(); if (v === u) return;
   const a = el.selectionStart, b = el.selectionEnd; el.value = u; try { el.setSelectionRange(a, b); } catch (e) {}
-}, true);
+};
+document.addEventListener('input', aMayus, true);
+document.addEventListener('compositionend', aMayus, true);
 document.addEventListener('change', ev => {
   const el = ev.target;
   if (el.id === 'fSinT' && S.F) { S.F.sinT = el.checked; S.F.motivoT = ''; pintaTicket(); }
@@ -851,7 +866,7 @@ document.addEventListener('click', async ev => {
       case 'nuevo': go('nuevo', { tipo: el.dataset.tipo }); break;
       case 'faltantes': go('mov', { sinTicket: true }); break;
       case 'quitarfaltan': S._soloFaltan = false; viewMov({ keep: true }); break;
-      case 'mas': S.page++; await loadMov(); break;
+      case 'mas': if (el.disabled) break; el.disabled = true; S.page++; await loadMov(); break;
       case 'sem': S.semSel = id; viewSem(); window.scrollTo(0, 0); break;
       case 'sembak': S.semSel = null; viewSem(); window.scrollTo(0, 0); break;
       case 'semxls': await semExcel(id); break;
@@ -864,8 +879,10 @@ document.addEventListener('click', async ev => {
       case 'revisar': await revisar(); break;
       case 'guardar': await guardar(); break;
       case 'addfile': {
-        const fs = await pickFuente(); if (!fs.length) break; toast('Subiendo…');
-        await subirArchivo(id, fs); toast('Archivo agregado.', 'ok'); await openDetail(id); break;
+        if (el.dataset.busy) break; el.dataset.busy = '1';
+        try { const fs = await pickFuente(); if (!fs.length) break; toast('Subiendo…');
+          await subirArchivo(id, fs); toast('Archivo agregado.', 'ok'); await openDetail(id); } finally { delete el.dataset.busy; }
+        break;
       }
       case 'quitarfile': {
         const mot = prompt('¿Por qué quitas este archivo? (queda registrado)'); if (!mot || !mot.trim()) break;
