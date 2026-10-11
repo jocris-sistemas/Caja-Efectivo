@@ -200,6 +200,7 @@ nav.tabs button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white
 .esh::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff}
 .esres{background:#e4e8ee;border-radius:10px;padding:8px;text-align:center;max-height:58vh;overflow:auto}
 .esres img{max-width:100%;max-height:54vh;box-shadow:0 1px 6px rgba(0,0,0,.25);background:#fff}
+input.autollenado{background:rgba(224,180,74,.16)!important;border-color:#e0b44a!important}
 </style>
 </head>
 <body>
@@ -764,6 +765,67 @@ async function abrirPath(path) {
   if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
 }
 
+/* ===================== LECTURA AUTOMÁTICA DEL TICKET ===================== */
+// Al subir la foto del ticket se llenan solos comercio, monto, fecha y concepto, solo en las casillas que no se escribieron a mano.
+const TK_CAMPOS = { fProv: 'comercio', fMonto: 'monto', fFecha: 'fecha', fConc: 'concepto' };
+const normNom = t => String(t || '').toUpperCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/[^A-Z0-9 ]/g, ' ').replace(/\b(S|A|DE|C|V|SA|CV|RL|SAB|SC|SAPI)\b/g, ' ').replace(/\s+/g, ' ').trim();
+function similitud(a, b) {
+  const bg = t => { const m = new Map(); for (let i = 0; i < t.length - 1; i++) { const k = t.slice(i, i + 2); m.set(k, (m.get(k) || 0) + 1); } return m; };
+  const A = bg(a), B = bg(b); let inter = 0, n = 0; A.forEach((v, k) => { n += v; if (B.has(k)) inter += Math.min(v, B.get(k)); }); B.forEach(v => n += v);
+  return n ? 2 * inter / n : (a === b ? 1 : 0);
+}
+function valoresTicket(L) {
+  const total = L.total == null ? NaN : (typeof L.total === 'number' ? L.total : parseMoney(L.total));
+  const fechaOk = L.fecha && /^\d{4}-\d{2}-\d{2}$/.test(L.fecha) && L.fecha <= today();
+  return { fProv: L.proveedor ? String(L.proveedor).toUpperCase().trim() : '', fMonto: total > 0 ? total.toFixed(2) : '', fFecha: fechaOk ? L.fecha : '', fConc: L.concepto ? String(L.concepto).toUpperCase().trim() : '' };
+}
+function difTicket(L) {
+  const v = valoresTicket(L), out = [], val = id => ($('#' + id)?.value || '').trim();
+  if (v.fMonto && val('fMonto') && cents(parseMoney(val('fMonto'))) !== cents(Number(v.fMonto))) out.push(`El ticket dice ${fmt(v.fMonto)} y capturaste ${fmt(parseMoney(val('fMonto')))}.`);
+  if (v.fFecha && val('fFecha') && v.fFecha !== val('fFecha')) out.push(`La fecha del ticket es ${fdate(v.fFecha)} y capturaste ${fdate(val('fFecha'))}.`);
+  if (v.fProv && val('fProv') && similitud(normNom(v.fProv), normNom(val('fProv'))) < 0.5) out.push(`El ticket es de "${v.fProv}" y capturaste "${val('fProv')}".`);
+  if (L.fecha && /^\d{4}-\d{2}-\d{2}$/.test(L.fecha) && L.fecha > today()) out.push('La fecha del ticket es futura: revísala.');
+  if (L.legible === false) out.push('La foto se ve borrosa: revisa los datos a mano.');
+  return out;
+}
+function marcaAuto() { const F = S.F; Object.keys(TK_CAMPOS).forEach(id => { const e = $('#' + id); if (e) e.classList.toggle('autollenado', !!(F && F.tkAuto && F.tkAuto.has(id))); }); }
+function autoLlenarTicket(F, forzar) {
+  const L = F.tkLectura; if (!L) return;
+  const v = valoresTicket(L); F.tkAuto = F.tkAuto || new Set(); F.tkToc = F.tkToc || new Set();
+  Object.keys(TK_CAMPOS).forEach(id => {
+    if (!v[id] || (!forzar && F.tkToc.has(id))) return;
+    const e = $('#' + id); if (!e) return; e.value = v[id]; F.tkAuto.add(id); F.tkToc.delete(id);
+  });
+  marcaAuto();
+}
+function pintaLecturaTicket() {
+  const box = $('#tkLee'), F = S.F; if (!box || !F) return;
+  const st = F.tkEstado;
+  if (!st || F.tipo !== 'gasto') { box.innerHTML = ''; return; }
+  if (st === 'leyendo') { box.innerHTML = '<div class="mut sm" style="margin-top:8px">Leyendo el ticket…</div>'; return; }
+  if (st === 'error') { box.innerHTML = `<div class="mut sm" style="margin-top:8px">No se pudo leer el ticket automáticamente${F.tkError ? ' (' + esc(F.tkError) + ')' : ''}. Llena los datos a mano.</div>`; return; }
+  const L = F.tkLectura, v = valoresTicket(L), dif = difTicket(L);
+  const dice = [v.fProv ? esc(v.fProv) : '', v.fMonto ? fmt(v.fMonto) : '', v.fFecha ? fdate(v.fFecha) : '', v.fConc ? esc(v.fConc) : ''].filter(Boolean).join(' · ');
+  const au = Object.keys(TK_CAMPOS).filter(id => F.tkAuto && F.tkAuto.has(id)).map(id => TK_CAMPOS[id]);
+  box.innerHTML = `<div class="${dif.length ? 'warnbox' : 'okbox'}" style="margin-top:10px"><b>El ticket dice:</b> ${dice || 'no se alcanzó a leer'}${L.es_factura ? ' <span class="chip">Factura</span>' : ''}
+    ${dif.length ? '<ul style="margin:6px 0 0 18px;padding:0">' + dif.map(t => `<li>${esc(t)}</li>`).join('') + '</ul>' : ''}
+    ${au.length ? `<div style="margin-top:4px">Llené con el ticket: <b>${au.join(', ')}</b> (marcados en amarillo). Revísalos; si algo se leyó mal, corrígelo en su casilla.</div>` : ''}
+    ${dice && dif.length ? '<button class="btn ghost sm" style="margin-top:8px" data-act="usarticket">Cambiar a lo que dice el ticket</button>' : ''}</div>`;
+}
+async function leerTicket(file) {
+  const F = S.F; if (!F || F.tipo !== 'gasto' || !file || !/^image\//.test(file.type || '')) return;
+  const tok = F.tkTok = (F.tkTok || 0) + 1;
+  F.tkEstado = 'leyendo'; F.tkLectura = null; pintaLecturaTicket();
+  try {
+    const im = await loadImg(file, 1600); const b64 = String(im.data).split(',')[1];
+    const { data, error } = await sb.functions.invoke('leer-ticket', { body: { imagen: b64, tipo: 'image/jpeg' } });
+    if (S.F !== F || F.tkTok !== tok) return;
+    if (error) { let m = ''; try { const j = await error.context.json(); m = j.error || ''; if (j.sin_clave) { F.tkEstado = null; pintaLecturaTicket(); return; } } catch (e) { m = error.message; } throw new Error(m); }
+    if (!data || !data.lectura) throw new Error(data && data.error || 'sin respuesta');
+    F.tkLectura = data.lectura; F.tkEstado = 'ok'; autoLlenarTicket(F, false);
+  } catch (e) { if (S.F !== F || F.tkTok !== tok) return; F.tkEstado = 'error'; F.tkError = String(e.message || e).slice(0, 120); }
+  pintaLecturaTicket();
+}
 /* ===================== VISTA: NUEVO ===================== */
 function nuevaClave() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()); }
 async function viewNuevo(opts) {
@@ -791,7 +853,7 @@ function pintaForm() {
         <label class="f">Concepto (en qué se gastó)</label><input type="text" id="fConc" autocomplete="off" placeholder="Ej. GASOLINA, COMIDA OBRA, PAPELERÍA…">
         <label class="f">Nota (opcional)</label><textarea id="fNota" style="min-height:52px"></textarea>
         <h3>Ticket / comprobante</h3>
-        <div id="ticketBox"></div>`
+        <div id="ticketBox"></div><div id="tkLee"></div>`
       : `
         <label class="f">De dónde viene el efectivo</label><input type="text" id="fConc" autocomplete="off" placeholder="Ej. REPOSICIÓN DE CAJA, DEPÓSITO DE…">
         <label class="f">Entregó / origen (opcional)</label><input type="text" id="fProv" autocomplete="off">
@@ -800,6 +862,9 @@ function pintaForm() {
     </div>
     <button class="btn ${g ? 'gold' : 'ok'} bigbtn" data-act="revisar">Revisar y guardar</button>`;
   pintaTicket();
+  Object.keys(TK_CAMPOS).forEach(id => { const e = $('#' + id); if (!e) return;
+    e.addEventListener('input', ev => { if (!ev.isTrusted) return; F.tkToc = F.tkToc || new Set(); F.tkToc.add(id); if (F.tkAuto) F.tkAuto.delete(id); e.classList.remove('autollenado'); if (F.tkLectura) pintaLecturaTicket(); }); });
+  marcaAuto(); pintaLecturaTicket();
   if (g) {
     const ck = () => revisaFolio();
     $('#fFolio').onblur = ck; $('#fCargo').onchange = ck; $('#fFolio').oninput = () => { F.folioDup = ''; $('#folioMsg').innerHTML = ''; };
@@ -1114,9 +1179,10 @@ document.addEventListener('click', async ev => {
       case 'semxlsall': await semExcel(null); break;
       case 'detalle': closeModal(); await openDetail(id); break;
       case 'abrir': await abrirPath(el.dataset.path); break;
-      case 'tipo': if (S.F) { const keepFiles = S.F.files; S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); } break;
-      case 'pickticket': { const fs = await pickFuenteT('comprobante_cobro'); if (fs.length) { S.F.files = S.F.files.concat(fs); pintaTicket(); } break; }
-      case 'limpiarticket': S.F.files = []; pintaTicket(); break;
+      case 'tipo': if (S.F) { const keep = ['fFecha', 'fMonto', 'fNota'].map(k => [k, $('#' + k)?.value]); S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); keep.forEach(([k, v]) => { const e = $('#' + k); if (e && v != null) e.value = v; }); } break;
+      case 'pickticket': { const F = S.F, fs = await pickFuenteT('comprobante_cobro'); if (fs.length && S.F === F) { const primero = !F.files.length; F.files = F.files.concat(fs); pintaTicket(); if (primero) leerTicket(fs.find(f => /^image\//.test(f.type || ''))); } break; }
+      case 'limpiarticket': S.F.files = []; S.F.tkTok = (S.F.tkTok || 0) + 1; S.F.tkEstado = null; S.F.tkLectura = null; pintaTicket(); pintaLecturaTicket(); break;
+      case 'usarticket': if (S.F) { autoLlenarTicket(S.F, true); pintaLecturaTicket(); toast('Datos cambiados a lo que dice el ticket. Revísalos.', 'ok'); } break;
       case 'revisar': await revisar(); break;
       case 'guardar': await guardar(); break;
       case 'addfile': {
