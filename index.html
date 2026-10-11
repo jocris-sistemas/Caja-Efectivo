@@ -241,7 +241,7 @@ const rol = () => S.perfil?.rol;
 const esAdmin = () => rol() === 'administrador';
 const rolTxt = r => ({ capturista: 'Administración', administrador: 'Administrador', contador: 'Contador' }[r] || r);
 const iniciales = n => String(n || '?').replace(/^ING\.\s*/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-const cargoNombre = id => S.cargos.find(c => c.id === id)?.nombre || '?';
+const cargoNombre = id => (S.cargosTodos || S.cargos).find(c => c.id === id)?.nombre || '?';
 const mxDia = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
 const hoyMx = () => mxDia(new Date());
 const errMsg = e => (e && (e.message || e.error_description)) || String(e);
@@ -272,7 +272,7 @@ function closeModal() { $('#modal').innerHTML = ''; avisaNav(); }
 function avisaNav() { if (EMBED) avisaPadre({ caja: 'nav' }); }
 window.enRaiz = () => !$('#modal').innerHTML && !document.querySelector('body > .overlay') && S.tab === 'caja';
 window.atras = () => {
-  const ov = document.querySelector('body > .overlay'); if (ov) { const no = ov.querySelector('#fzNo'); if (no) no.click(); return true; }
+  const ov = document.querySelector('body > .overlay'); if (ov) { const no = ov.querySelector('#fzNo, #esOrig, #esOrig2'); if (no) no.click(); return true; }
   if ($('#modal').innerHTML) { closeModal(); return true; }
   if (S.tab === 'sem' && S.semSel) { S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); return true; }
   if (S.tab !== 'caja') { go('caja'); return true; }
@@ -293,7 +293,10 @@ const EYE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke=
 const EYE_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 const pwField = (id, ac) => `<div class="pw"><input type="password" id="${id}" autocomplete="${ac}" autocapitalize="off" autocorrect="off" spellcheck="false" data-nocaps required><button type="button" class="eye" data-act="verpass" data-for="${id}" aria-label="Mostrar u ocultar contraseña">${EYE}</button></div>`;
 function renderLogin(msg = '') {
-  if (EMBED) { $('#app').innerHTML = '<div class="spin">Tu sesión terminó. Vuelve a entrar.</div>'; avisaPadre({ caja: 'sesion' }); return; }
+  if (EMBED) {
+    if (msg) { $('#app').innerHTML = `<div class="login"><div class="box"><div class="warnbox">${esc(msg)}</div><button class="btn gold" style="width:100%" id="btnRetry">Reintentar</button></div></div>`; $('#btnRetry').onclick = () => { $('#app').innerHTML = '<div class="spin">Cargando…</div>'; boot().catch(e => renderLogin('No se pudo cargar: ' + errMsg(e))); }; return; }
+    $('#app').innerHTML = '<div class="spin">Tu sesión terminó. Vuelve a entrar.</div>'; avisaPadre({ caja: 'sesion' }); return;
+  }
   try { closeModal(); } catch (e) { } document.querySelectorAll('body > .overlay').forEach(o => o.remove());
   $('#app').innerHTML = `
   <div class="login">
@@ -332,9 +335,10 @@ async function boot() {
   S.perfil = p;
   $('#app').innerHTML = '<div class="spin">Cargando…</div>';
   // Cargos de cheques (activos) + los que solo existen en la caja (ANGEL, ERICK, MAQUINARIA, CONTRATISTAS, OTROS).
-  const c = await sb.from('cargos').select('*').or('activo.eq.true,solo_caja.eq.true').order('id');
+  const c = await sb.from('cargos').select('*').order('id');
   if (c.error) throw c.error;
-  S.cargos = (c.data || []).filter(x => x.nombre !== 'SIN CARGO').sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
+  S.cargosTodos = c.data || [];
+  S.cargos = S.cargosTodos.filter(x => (x.activo || x.solo_caja) && x.nombre !== 'SIN CARGO').sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
   S.tab = 'caja';
   renderShell();
 }
@@ -355,7 +359,7 @@ function go(tab, opts) {
   S.tab = tab;
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   if (tab !== 'nuevo') S.F = null;
-  if (tab === 'sem' && !(opts && opts.keep)) S.semSel = null;
+  if (tab === 'sem' && !(opts && opts.keep)) { S.semSel = null; S.hist = null; }
   ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit }[tab])(opts);
   window.scrollTo(0, 0); avisaNav();
 }
@@ -384,9 +388,10 @@ async function viewCaja() {
     const ym = hoy.slice(0, 7); const [y, m] = ym.split('-').map(Number);
     const nx = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
     const desde = lunAnt < ym + '-01' ? lunAnt : ym + '-01';
-    const movs = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').gte('fecha', desde).lt('fecha', nx > addDias(lun, 7) ? nx : addDias(lun, 7)).order('fecha', { ascending: false })).data || [];
-    const rec = (await sb.from('caja_movimientos').select(SEL).order('creado_en', { ascending: false }).limit(8)).data || [];
-    const sinT = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(1000)).data || [];
+    const ok = r => { if (r.error) throw r.error; return r.data || []; };
+    const movs = ok(await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').gte('fecha', desde).lt('fecha', nx > addDias(lun, 7) ? nx : addDias(lun, 7)).order('fecha', { ascending: false }));
+    const rec = ok(await sb.from('caja_movimientos').select(SEL).order('creado_en', { ascending: false }).limit(8));
+    const sinT = ok(await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(1000));
     if (S.tab !== 'caja') return;
     const gas = movs.filter(x => x.tipo === 'gasto' && !x.es_historial), suma = arr => arr.reduce((a, x) => a + cents(x.monto), 0) / 100;
     const sem = gas.filter(x => x.fecha >= lun && x.fecha <= addDias(lun, 6)), semAnt = gas.filter(x => x.fecha >= lunAnt && x.fecha < lun);
@@ -465,11 +470,13 @@ async function loadMov() {
 
 /* ===================== DETALLE ===================== */
 async function openDetail(id) {
+  const tok = S.detTok = (S.detTok || 0) + 1;
   openModal('<div class="spin">Cargando…</div>');
   try {
     const { data: m } = await sb.from('caja_movimientos').select(SEL).eq('id', id).maybeSingle();
     if (!m) throw new Error('Movimiento no encontrado.');
     const { data: bit } = await sb.from('caja_bitacora').select('*').eq('movimiento_id', id).order('creado_en', { ascending: true });
+    if (tok !== S.detTok || !$('#modal').innerHTML) return;
     const ent = m.tipo === 'entrada', an = m.estatus === 'anulado', arch = archAct(m); S._detMov = m;
     // Solo Pedro (puede_archivos) cambia lo de otros; los demás, solo lo suyo y durante 24 horas.
     const H24 = 24 * 3600 * 1000, reciente = t => Date.now() - new Date(t).getTime() < H24, super_ = !!S.perfil.puede_archivos;
@@ -502,13 +509,13 @@ async function openDetail(id) {
 function pickFiles(multiple = true) {
   return new Promise(res => {
     const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*,application/pdf'; i.multiple = multiple;
-    i.onchange = () => res([...i.files]); i.click();
+    i.onchange = () => res([...i.files]); i.addEventListener('cancel', () => res([])); i.click();
   });
 }
 function pickCamara() {
   return new Promise(res => {
     const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.setAttribute('capture', 'environment');
-    i.onchange = () => res([...i.files]); i.click();
+    i.onchange = () => res([...i.files]); i.addEventListener('cancel', () => res([])); i.click();
   });
 }
 function pickFuente() {
@@ -888,7 +895,7 @@ function pintaForm() {
         <div class="grid2"><div><label class="f">Folio (opcional)</label><input type="text" id="fFolio" autocomplete="off" placeholder="Solo si ya tiene"></div>
           <div><label class="f">Proveedor / comercio</label><input type="text" id="fProv" autocomplete="off"></div></div>
         <div id="folioMsg"></div>
-        <label class="f">Concepto (en qué se gastó)</label><input type="text" id="fConc" autocomplete="off" placeholder="Ej. GASOLINA, COMIDA OBRA, PAPELERÍA…">
+        <label class="f">Concepto (en qué se gastó)</label><input type="text" id="fConc" autocomplete="off" maxlength="150" placeholder="Ej. GASOLINA, COMIDA OBRA, PAPELERÍA…">
         <label class="f">Nota (opcional)</label><textarea id="fNota" style="min-height:52px"></textarea>
         <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:15px"><input type="checkbox" id="fRec" ${F.rec ? 'checked' : ''} style="width:auto"> <b>Este gasto lleva recibo firmado</b></label>
         <div id="recBox"></div>
@@ -926,9 +933,9 @@ async function revisaFolio() {
   if (!cargo || !folio) return;
   const [a, b] = await Promise.all([
     sb.from('cheque_folios').select('cheque_id,folio_numero').eq('cargo_id', cargo).eq('folio_numero', folio).eq('activo', true),
-    sb.from('caja_movimientos').select('numero,folio_numero').eq('cargo_id', cargo).eq('folio_numero', folio).eq('tipo', 'gasto').eq('estatus', 'vigente')]);
+    sb.from('caja_movimientos').select('numero,folio_numero,clave_submision').eq('cargo_id', cargo).eq('folio_numero', folio).eq('tipo', 'gasto').eq('estatus', 'vigente')]);
   if ((a.data || []).length) F.folioDup = `El folio ${folio} de ${cargoNombre(cargo)} ya se usó en un cheque.`;
-  else if ((b.data || []).length) F.folioDup = `El folio ${folio} de ${cargoNombre(cargo)} ya se usó en otro gasto de la caja.`;
+  else if ((b.data || []).filter(x => x.clave_submision !== F.clave).length) F.folioDup = `El folio ${folio} de ${cargoNombre(cargo)} ya se usó en otro gasto de la caja.`;
   if (box && F.folioDup) box.innerHTML = `<div class="warnbox">${esc(F.folioDup)} No se puede repetir.</div>`;
 }
 // Semana a la que va el gasto (lunes a domingo). Lo pagado el sábado o domingo va en esa semana aunque se capture el lunes.
@@ -974,7 +981,8 @@ function reciboPDF(m) {
     doc.setTextColor(27, 36, 48); doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.text('BUENO POR ' + fmt(m.monto), W - M - 33, y0 + 36.4, { align: 'center' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.text(`Monterrey, N.L., a ${fdia(m.fecha)}.`, M, y0 + 36.4);
     const cuerpo = `Yo, ${recibe}, recibí de parte de ${entrega} la cantidad de ${fmt(m.monto)} (${numALetras(m.monto)}) por concepto de ${String(m.concepto || '').toUpperCase()}.`;
-    doc.setFontSize(12.5); doc.text(doc.splitTextToSize(cuerpo, W - 2 * M), M, y0 + 53, { lineHeightFactor: 1.55 });
+    let fs = 12.5, lin; for (;;) { doc.setFontSize(fs); lin = doc.splitTextToSize(cuerpo, W - 2 * M); if (lin.length * fs * 0.3528 * 1.55 <= 46 || fs <= 8) break; fs -= 0.5; }
+    doc.text(lin, M, y0 + 53, { lineHeightFactor: 1.55 });
     const fy = y0 + 105; doc.setDrawColor(27, 36, 48); doc.setLineWidth(0.3); doc.line(W / 2 - 48, fy, W / 2 + 48, fy);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(recibe, W / 2, fy + 5.5, { align: 'center' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90, 98, 110); doc.text('Nombre y firma de quien recibe', W / 2, fy + 10, { align: 'center' });
@@ -1052,7 +1060,7 @@ async function guardar() {
       try { await subirArchivo(mov.id, F.files); } catch (e) { aviso = 'El movimiento se guardó, pero NO se pudo subir el ticket (' + errMsg(e) + '). Ábrelo y agrégalo.'; }
     }
     closeModal(); S.F = null;
-    if (aviso) { toast(aviso, 'err'); go('mov'); setTimeout(() => openDetail(mov.id), 300); }
+    if (aviso) { toast(aviso, 'err'); go('caja'); setTimeout(() => openDetail(mov.id), 300); }
     else if (d.rec) { S._recMov = mov; go('caja'); openModal(`<h2 style="margin-top:0">Gasto guardado</h2><div class="okbox">Imprime el recibo para que lo firme <b>${esc(d.recRecibe)}</b>. Ya firmado, súbele la foto desde el detalle del gasto.</div>
       <div class="row" style="margin-top:12px"><button class="btn gold grow" data-act="imprecibo" data-id="${mov.id}">Imprimir recibo</button><button class="btn ghost" data-act="detalle" data-id="${mov.id}">Ver gasto</button></div>`); }
     else { toast(g ? 'Gasto guardado.' : 'Entrada guardada.', 'ok'); go('caja'); }
@@ -1146,7 +1154,7 @@ async function viewSem() {
     <div class="filters card" style="padding:10px"><input type="text" id="semQ" placeholder="Buscar en todas las semanas (concepto, folio, persona)…" value="${esc(S.semQ || '')}"></div>
     <div id="semRes" class="hidden"></div>
     <div id="semLista">
-      <div class="card bars sembars"><div class="b" style="margin-bottom:4px">Total del año por grupo</div>${garr.map(([g, v]) => `<div class="br"><div class="n">${esc(g)}</div><div class="bar"><i style="width:${Math.max(2, Math.round(v / gmx * 100))}%"></i></div><div class="m">${fmt(v / 100)}</div></div>`).join('')}</div>
+      <div class="card bars sembars"><div class="b" style="margin-bottom:4px">Total ${esc(anio)} por grupo</div>${garr.map(([g, v]) => `<div class="br"><div class="n">${esc(g)}</div><div class="bar"><i style="width:${Math.max(2, Math.round(v / gmx * 100))}%"></i></div><div class="m">${fmt(v / 100)}</div></div>`).join('')}</div>
       <div class="r" style="margin-bottom:6px"><button class="btn ghost sm" data-act="semxlsall">Descargar todo en Excel</button></div>
       ${html}</div>`;
   const pintaBusqueda = () => {
@@ -1287,7 +1295,7 @@ document.addEventListener('click', async ev => {
       }
       case 'respaldo': await respaldoExcel(); break;
       case 'nuevo': go('nuevo', { tipo: el.dataset.tipo }); break;
-      case 'faltantes': go('mov', { sinTicket: true }); break;
+      case 'faltantes': { const fl = S._faltan || []; openModal(`<h2 style="margin-top:0">Gastos sin ticket</h2><div class="mut sm" style="margin-bottom:8px">${fl.length} gasto(s) sin ticket ni foto del recibo firmado. Toca uno para agregarle su comprobante.</div>${fl.map(itemMov).join('') || '<div class="mut">No hay pendientes.</div>'}`); break; }
       case 'quitarfaltan': S._soloFaltan = false; viewMov({ keep: true }); break;
       case 'mas': if (el.disabled) break; el.disabled = true; S.page++; await loadMov(); break;
       case 'sem': S.semSel = id; viewSem(); window.scrollTo(0, 0); avisaNav(); break;
@@ -1323,7 +1331,7 @@ document.addEventListener('click', async ev => {
       }
       case 'anular2': {
         const mot = $('#anMot').value.trim().toUpperCase(); if (!mot) return toast('Escribe el motivo.', 'err');
-        el.disabled = true; await rpc('caja_anular', { p_id: id, p_motivo: mot }); S.hist = null; closeModal(); toast('Movimiento anulado.', 'ok'); go(S.tab); break;
+        el.disabled = true; await rpc('caja_anular', { p_id: id, p_motivo: mot }); S.hist = null; closeModal(); toast('Movimiento anulado.', 'ok'); if (S.tab === 'sem') go('sem', { keep: true }); else go(S.tab); break;
       }
       case 'arqueo': {
         const v = parseMoney($('#aqMonto').value); if (isNaN(v) || v < 0) return toast('Escribe el efectivo contado.', 'err');
