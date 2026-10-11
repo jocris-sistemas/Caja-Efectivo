@@ -341,7 +341,7 @@ async function boot() {
 
 /* ===================== SHELL ===================== */
 function renderShell() {
-  const tabs = [['caja', 'Caja'], ['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['bit', 'Bitácora']];   // Movimientos y Arqueo ocultos por ahora
+  const tabs = [['caja', 'Caja'], ['nuevo', 'Nuevo'], ['sem', 'Semanas']];   // Movimientos y Arqueo ocultos; la Bitácora se abre desde Mi cuenta
   $('#app').innerHTML = `
   <header class="top">
     <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
@@ -1194,7 +1194,7 @@ async function semExcel(semana) {
 
 /* ===================== VISTA: BITACORA ===================== */
 async function viewBit() {
-  $('#view').innerHTML = `<div class="pagehead"><h2>Bitácora de caja</h2><span class="sub">Registro permanente; no se puede borrar ni editar</span></div><div id="bitList" class="spin">Cargando…</div>`;
+  $('#view').innerHTML = `<div class="pagehead"><h2>Bitácora de Acumulado</h2><span class="sub">Registro permanente; no se puede borrar ni editar</span></div><div id="bitList" class="spin">Cargando…</div>`;
   const { data, error } = await sb.from('caja_bitacora').select('*').order('creado_en', { ascending: false }).limit(150);
   if (S.tab !== 'bit' || !$('#bitList')) return;
   if (error) return $('#bitList').innerHTML = `<div class="warnbox">${esc(errMsg(error))}</div>`;
