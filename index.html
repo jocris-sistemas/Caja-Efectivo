@@ -256,6 +256,8 @@ const fcorta = d => { const [, m, dd] = d.split('-'); return `${Number(dd)} ${ME
 const semTxt = l => { const dom = addDias(l, 6), [y1, m1, d1] = l.split('-'), [y2, m2, d2] = dom.split('-');
   return m1 === m2 ? `${Number(d1)} al ${Number(d2)} ${MESES_C[Number(m2) - 1]} ${y2}` : `${Number(d1)} ${MESES_C[Number(m1) - 1]}${y1 !== y2 ? ' ' + y1 : ''} al ${Number(d2)} ${MESES_C[Number(m2) - 1]} ${y2}`; };
 const anioSem = l => addDias(l, 3).slice(0, 4);   // el año de la semana es el de su jueves
+const semNum = l => { const j = addDias(l, 3); return Math.floor((Date.parse(j + 'T00:00:00Z') - Date.parse(j.slice(0, 4) + '-01-01T00:00:00Z')) / 864e5 / 7) + 1; };
+const semEtq = l => `Semana ${semNum(l)}`;
 const sinRecibo = m => m.recibo && !archAct(m).length;
 const sinComprobante = m => /^SIN COMPROBANTE/i.test(m.nota || '');
 
@@ -264,8 +266,18 @@ function toast(msg, type = '') {
   toast._t = setTimeout(() => t.classList.add('hidden'), type === 'err' ? 6500 : 3000);
 }
 async function rpc(name, args) { const { data, error } = await sb.rpc(name, args); if (error) throw error; return data; }
-function openModal(html) { $('#modal').innerHTML = `<div class="overlay" data-act="ovl"><div class="sheet"><button class="x" data-act="close">×</button>${html}</div></div>`; }
-function closeModal() { $('#modal').innerHTML = ''; }
+function openModal(html) { $('#modal').innerHTML = `<div class="overlay" data-act="ovl"><div class="sheet"><button class="x" data-act="close">×</button>${html}</div></div>`; avisaNav(); }
+function closeModal() { $('#modal').innerHTML = ''; avisaNav(); }
+/* Botón "atrás": dentro de Acumulado regresa de pantalla en pantalla; desde el Inicio vuelve a Cheques. */
+function avisaNav() { if (EMBED) avisaPadre({ caja: 'nav' }); }
+window.enRaiz = () => !$('#modal').innerHTML && !document.querySelector('body > .overlay') && S.tab === 'caja';
+window.atras = () => {
+  const ov = document.querySelector('body > .overlay'); if (ov) { const no = ov.querySelector('#fzNo'); if (no) no.click(); return true; }
+  if ($('#modal').innerHTML) { closeModal(); return true; }
+  if (S.tab === 'sem' && S.semSel) { S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); return true; }
+  if (S.tab !== 'caja') { go('caja'); return true; }
+  return false;
+};
 const ICON = {
   caja: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
   mov: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
@@ -345,7 +357,7 @@ function go(tab, opts) {
   if (tab !== 'nuevo') S.F = null;
   if (tab === 'sem' && !(opts && opts.keep)) S.semSel = null;
   ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit }[tab])(opts);
-  window.scrollTo(0, 0);
+  window.scrollTo(0, 0); avisaNav();
 }
 
 /* ===================== CONSULTAS ===================== */
@@ -384,8 +396,8 @@ async function viewCaja() {
     const faltan = sinT.filter(x => !archAct(x).length && !sinComprobante(x));
     const tSem = suma(sem), tAnt = suma(semAnt), conEntradas = Number(sd.entradas || 0) > 0;
     $('#view').innerHTML = `
-      <div class="saldo"><div class="lbl">Gasto de esta semana</div><div class="num">${fmt(tSem)}</div>
-        <div class="sub2">Del ${esc(semTxt(lun))} · ${sem.length} gasto(s) · semana pasada ${fmt(tAnt)}</div></div>
+      <div class="saldo"><div class="lbl">Vamos en la semana ${semNum(lun)} · gasto de esta semana</div><div class="num">${fmt(tSem)}</div>
+        <div class="sub2">Del ${esc(semTxt(lun))} · ${sem.length} gasto(s) · semana ${semNum(lunAnt)}: ${fmt(tAnt)}</div></div>
       <div class="row" style="margin-bottom:12px">
         <button class="btn gold grow bigbtn" data-act="nuevo" data-tipo="gasto">− Nuevo gasto</button>
         <button class="btn ghost" style="flex:none" data-act="nuevo" data-tipo="entrada">+ Entrada</button></div>
@@ -924,7 +936,7 @@ function pintaSemInfo() {
   const el = $('#fSemInfo'), f = $('#fFecha')?.value; if (!el) return;
   if (!f) { el.innerHTML = ''; return; }
   const sab = addDias(f, -2);
-  el.innerHTML = `Va en la semana del <b>${esc(semTxt(lunesDe(f)))}</b>.` + (diaSem(f) === 1 ? ` <a href="#" data-act="fsab" data-f="${sab}" style="color:var(--navy2);font-weight:700">¿Se pagó el sábado? Pasarlo al sáb ${esc(fcorta(sab))} (semana anterior)</a>` : '');
+  el.innerHTML = `Va en la <b>semana ${semNum(lunesDe(f))}</b> (del ${esc(semTxt(lunesDe(f)))}).` + (diaSem(f) === 1 ? ` <a href="#" data-act="fsab" data-f="${sab}" style="color:var(--navy2);font-weight:700">¿Se pagó el sábado? Pasarlo al sáb ${esc(fcorta(sab))} (semana anterior)</a>` : '');
 }
 function recEntregaDef() { try { return localStorage.getItem('caja_rec_entrega') || ''; } catch (e) { return ''; } }
 function pintaRecibo() {
@@ -1019,7 +1031,7 @@ async function revisar() {
       <div>Concepto</div><div>${esc(d.concepto)}</div>
       ${d.rec ? `<div>Recibo</div><div>Recibe <b>${esc(d.recRecibe)}</b>, de parte de ${esc(d.recEntrega)}</div>` : ''}
       <div>${g ? 'Ticket' : 'Comprobante'}</div><div>${F.files.length ? F.files.length + ' archivo(s)' : (d.sinT ? 'Sin comprobante: ' + esc(d.motivoT) : d.rec ? 'Se sube la foto del recibo ya firmado' : '—')}</div>
-      <div>Semana</div><div>Del ${esc(semTxt(lunesDe(d.fecha)))}</div>
+      <div>Semana</div><div><b>${semNum(lunesDe(d.fecha))}</b> · del ${esc(semTxt(lunesDe(d.fecha)))}</div>
       ${conEnt ? `<div>Efectivo en caja después</div><div class="money">${fmt(nuevoSaldo)}</div>` : ''}</div></div>
     ${conEnt && nuevoSaldo < 0 ? `<div class="warnbox">Según las entradas registradas, el efectivo quedaría en ${fmt(nuevoSaldo)}. Si hubo una reposición que no se capturó, regístrala como entrada.</div>` : ''}
     ${dup.length ? `<div class="warnbox"><b>Ojo:</b> ya hay ${dup.length} ${d.tipo} vigente(s) con la misma fecha y el mismo monto (${dup.map(x => '#' + x.numero + ' ' + esc(x.proveedor || x.concepto || '')).join(', ')}). Verifica que no estés duplicando.</div>` : ''}
@@ -1085,7 +1097,7 @@ const MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 const fsem = d => { const [y, m, dd] = d.split('-'); return `${Number(dd)} ${MES_C[Number(m) - 1]} ${y}`; };
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 const ordGrupo = g => { const i = GRUPOS_ORD.indexOf(g); return i < 0 ? 99 : i; };
-const lineaSem = (r, conSemana) => `<div class="sl"><div class="c">${esc(r.concepto || '')}<small>${r.fecha ? esc(DIAS_C[diaSem(r.fecha)] + ' ' + fcorta(r.fecha)) + ' · ' : ''}${r.folio ? 'Folio ' + esc(r.folio) + ' · ' : ''}${esc(r.grupo || '')}${conSemana ? ' · semana del ' + esc(semTxt(r.semana)) : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div><div class="m">${fmt(r.importe)}</div></div>`;
+const lineaSem = (r, conSemana) => `<div class="sl"><div class="c">${esc(r.concepto || '')}<small>${r.fecha ? esc(DIAS_C[diaSem(r.fecha)] + ' ' + fcorta(r.fecha)) + ' · ' : ''}${r.folio ? 'Folio ' + esc(r.folio) + ' · ' : ''}${esc(r.grupo || '')}${conSemana ? ' · ' + esc(semEtq(r.semana)) + ' (del ' + esc(semTxt(r.semana)) + ')' : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div><div class="m">${fmt(r.importe)}</div></div>`;
 const hojaTxt = w => w.hojas && w.hojas.size ? 'hoja de Excel del ' + [...w.hojas].map(d => DIAS_C[diaSem(d)] + ' ' + fcorta(d)).join(', ') : '';
 // Junta el historial del Excel con los gastos capturados en la app, por semana de lunes a domingo.
 async function cargarHist(force) {
@@ -1122,15 +1134,15 @@ async function viewSem() {
   const mxc = mxW.c;
   S.semanas.forEach(x => {
     const m = addDias(x.semana, 3).slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
-    html += `<div class="item semitem" data-act="sem" data-id="${x.semana}"><div class="top"><div class="hl b">Semana del ${esc(semTxt(x.semana))}${x.semana === lunesDe(hoyMx()) ? ' <span class="chip ent">En curso</span>' : ''}</div><span class="money">${fmt(x.c / 100)}</span></div>
+    html += `<div class="item semitem" data-act="sem" data-id="${x.semana}"><div class="top"><div class="hl b">${esc(semEtq(x.semana))} <span class="mut" style="font-weight:600">· del ${esc(semTxt(x.semana))}</span>${x.semana === lunesDe(hoyMx()) ? ' <span class="chip ent">En curso</span>' : ''}</div><span class="money">${fmt(x.c / 100)}</span></div>
       <div class="mut sm">${x.rows.length} líneas${x.nApp ? ` · ${x.nApp} capturada(s) en la app` : ''}${x.hojas.size ? ' · ' + esc(hojaTxt(x)) : ''}</div><div class="bar"><i style="width:${Math.max(3, Math.round(x.c / mxc * 100))}%"></i></div></div>`;
   });
   $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal ${esc(anio)}</h2><span class="sub">Semanas de lunes a domingo</span></div>
     <div class="statgrid">
       <div class="stat out"><div class="l">Total ${esc(anio)}</div><div class="v">${fmt(tot / 100)}</div></div>
       <div class="stat"><div class="l">Promedio semanal</div><div class="v">${fmt(Math.round(tot / n) / 100)}</div></div>
-      <div class="stat"><div class="l">Semana más alta</div><div class="v">${fmt(mxW.c / 100)}</div><div class="mut sm">${esc(semTxt(mxW.semana))}</div></div>
-      <div class="stat"><div class="l">Semana más baja</div><div class="v">${fmt(mnW.c / 100)}</div><div class="mut sm">${esc(semTxt(mnW.semana))}</div></div></div>
+      <div class="stat"><div class="l">Semana más alta</div><div class="v">${fmt(mxW.c / 100)}</div><div class="mut sm">${esc(semEtq(mxW.semana))} · ${esc(semTxt(mxW.semana))}</div></div>
+      <div class="stat"><div class="l">Semana más baja</div><div class="v">${fmt(mnW.c / 100)}</div><div class="mut sm">${esc(semEtq(mnW.semana))} · ${esc(semTxt(mnW.semana))}</div></div></div>
     <div class="filters card" style="padding:10px"><input type="text" id="semQ" placeholder="Buscar en todas las semanas (concepto, folio, persona)…" value="${esc(S.semQ || '')}"></div>
     <div id="semRes" class="hidden"></div>
     <div id="semLista">
@@ -1153,26 +1165,26 @@ async function viewSem() {
 function viewSemDet(w) {
   const i = S.semanas.indexOf(w), nueva = S.semanas[i - 1], vieja = S.semanas[i + 1];
   const gs = gruposDe(w);
-  $('#view').innerHTML = `<div class="pagehead"><h2>Semana del ${esc(semTxt(w.semana))}</h2><span class="sub">Lunes a domingo</span></div>
+  $('#view').innerHTML = `<div class="pagehead"><h2>${esc(semEtq(w.semana))}</h2><span class="sub">Del ${esc(semTxt(w.semana))} · lunes a domingo</span></div>
     <div class="semnav"><button class="btn ghost sm" data-act="sembak">← Todas las semanas</button></div>
-    <div class="saldo"><div class="lbl">Gasto de la semana</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos${w.hojas.size ? ' · ' + esc(hojaTxt(w)) : ''}</div></div>
-    <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ ${esc(fcorta(vieja.semana))}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">${esc(fcorta(nueva.semana))} ›</button>` : ''}</div>
+    <div class="saldo"><div class="lbl">Gasto de la semana ${semNum(w.semana)}</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos${w.hojas.size ? ' · ' + esc(hojaTxt(w)) : ''}</div></div>
+    <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ Sem ${semNum(vieja.semana)}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">Sem ${semNum(nueva.semana)} ›</button>` : ''}</div>
     ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => r.origen === 'app' ? `<div data-act="detalle" data-id="${r.id}" style="cursor:pointer">${lineaSem(r)}</div>` : lineaSem(r)).join('')}</details>`).join('')}
     <div class="r" style="margin:6px 0 12px"><button class="btn ghost sm" data-act="semxls" data-id="${w.semana}">Descargar esta semana en Excel</button></div>`;
 }
 async function semExcel(semana) {
   await cargarSheetJS(); await cargarHist();
   const wb = XLSX.utils.book_new(); const num = v => Number(v);
-  const det = r => ({ 'Semana (lunes)': r.semana, Semana: 'Del ' + semTxt(r.semana), Fecha: r.fecha || '', 'Hoja Excel': r.hoja || '', Origen: r.origen === 'app' ? 'APP' : 'EXCEL', Grupo: r.grupo, Folio: r.folio || '', Concepto: r.concepto, Importe: num(r.importe), Nota: r.nota || '' });
+  const det = r => ({ 'No. semana': semNum(r.semana), 'Semana (lunes)': r.semana, Semana: 'Del ' + semTxt(r.semana), Fecha: r.fecha || '', 'Hoja Excel': r.hoja || '', Origen: r.origen === 'app' ? 'APP' : 'EXCEL', Grupo: r.grupo, Folio: r.folio || '', Concepto: r.concepto, Importe: num(r.importe), Nota: r.nota || '' });
   if (semana) {
     const w = S.semanas.find(x => x.semana === semana);
-    const rows = gruposDe(w).flatMap(g => g.rows).map(det); rows.push({ 'Semana (lunes)': semana, Semana: 'Del ' + semTxt(semana), Grupo: 'TOTAL', Importe: w.c / 100 });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Semana ' + semana);
-    XLSX.writeFile(wb, `Gasto_semanal_${semana}.xlsx`);
+    const rows = gruposDe(w).flatMap(g => g.rows).map(det); rows.push({ 'No. semana': semNum(semana), 'Semana (lunes)': semana, Semana: 'Del ' + semTxt(semana), Grupo: 'TOTAL', Importe: w.c / 100 });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Semana ' + semNum(semana));
+    XLSX.writeFile(wb, `Gasto_semana_${semNum(semana)}_${semana}.xlsx`);
   } else {
     const asc = [...S.semanas].reverse();
     const todos = [...new Set(S.hist.map(r => r.grupo || 'OTROS'))].sort((x, y) => ordGrupo(x) - ordGrupo(y) || x.localeCompare(y));
-    const res = asc.map(w => { const o = { 'Semana (lunes)': w.semana, Semana: 'Del ' + semTxt(w.semana), Lineas: w.rows.length }; todos.forEach(g => o[g] = 0); gruposDe(w).forEach(g => o[g.nombre] = g.c / 100); o.TOTAL = w.c / 100; return o; });
+    const res = asc.map(w => { const o = { 'No. semana': semNum(w.semana), 'Semana (lunes)': w.semana, Semana: 'Del ' + semTxt(w.semana), Lineas: w.rows.length }; todos.forEach(g => o[g] = 0); gruposDe(w).forEach(g => o[g.nombre] = g.c / 100); o.TOTAL = w.c / 100; return o; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(res), 'Resumen semanal');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(S.hist.map(det)), 'Detalle');
     XLSX.writeFile(wb, `Gasto_semanal_${anioSem(asc[asc.length - 1].semana)}.xlsx`);
@@ -1228,7 +1240,7 @@ async function respaldoExcel() {
     const nFiles = {}; arch.filter(a => a.activo).forEach(a => nFiles[a.movimiento_id] = (nFiles[a.movimiento_id] || 0) + 1);
     const wb = XLSX.utils.book_new();
     const sheet = (rows, name) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ info: 'Sin datos' }]), name);
-    sheet(mov.map(m => ({ Numero: m.numero, Tipo: m.tipo, Fecha: m.fecha, Monto: Number(m.monto), Cargo: m.cargo_id ? cargoNombre(m.cargo_id) : '', Folio: m.folio_numero || '', Proveedor: m.proveedor || '', Concepto: m.concepto || '', Nota: m.nota || '', 'Semana (lunes)': lunesDe(m.fecha), Recibo: m.recibo ? 'SI' : '', Recibe: m.recibo_recibe || '', Entrega: m.recibo_entrega || '',
+    sheet(mov.map(m => ({ Numero: m.numero, Tipo: m.tipo, Fecha: m.fecha, Monto: Number(m.monto), Cargo: m.cargo_id ? cargoNombre(m.cargo_id) : '', Folio: m.folio_numero || '', Proveedor: m.proveedor || '', Concepto: m.concepto || '', Nota: m.nota || '', 'No. semana': semNum(lunesDe(m.fecha)), 'Semana (lunes)': lunesDe(m.fecha), Recibo: m.recibo ? 'SI' : '', Recibe: m.recibo_recibe || '', Entrega: m.recibo_entrega || '',
       Estatus: m.estatus, Historial: m.es_historial ? 'SI' : '', 'Archivos': nFiles[m.id] || 0, 'Capturo': m.creado_por_nombre || '', 'Capturado en': m.creado_en, 'Motivo anulacion': m.motivo_anulacion || '', 'Anulado por': m.anulado_por_nombre || '' })), 'Movimientos');
     sheet(arq.map(a => ({ Fecha: a.fecha, 'Saldo sistema': Number(a.saldo_sistema), 'Efectivo contado': Number(a.efectivo_contado), Diferencia: Number(a.diferencia), Nota: a.nota || '', Por: a.creado_por_nombre || '', 'Registrado en': a.creado_en })), 'Arqueos');
     sheet(bit.map(x => ({ Fecha: x.creado_en, Usuario: x.usuario_nombre || '', Accion: x.accion, Detalle: x.detalle ? JSON.stringify(x.detalle) : '' })), 'Bitacora');
@@ -1278,8 +1290,8 @@ document.addEventListener('click', async ev => {
       case 'faltantes': go('mov', { sinTicket: true }); break;
       case 'quitarfaltan': S._soloFaltan = false; viewMov({ keep: true }); break;
       case 'mas': if (el.disabled) break; el.disabled = true; S.page++; await loadMov(); break;
-      case 'sem': S.semSel = id; viewSem(); window.scrollTo(0, 0); break;
-      case 'sembak': S.semSel = null; viewSem(); window.scrollTo(0, 0); break;
+      case 'sem': S.semSel = id; viewSem(); window.scrollTo(0, 0); avisaNav(); break;
+      case 'sembak': S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); break;
       case 'semxls': await semExcel(id); break;
       case 'semxlsall': await semExcel(null); break;
       case 'detalle': closeModal(); await openDetail(id); break;
