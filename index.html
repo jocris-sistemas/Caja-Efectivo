@@ -329,7 +329,7 @@ async function boot() {
 
 /* ===================== SHELL ===================== */
 function renderShell() {
-  const tabs = [['caja', 'Caja'], ['mov', 'Movim.'], ['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['bit', 'Bitácora']];   // Arqueo oculto por ahora
+  const tabs = [['caja', 'Caja'], ['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['bit', 'Bitácora']];   // Movimientos y Arqueo ocultos por ahora
   $('#app').innerHTML = `
   <header class="top">
     <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
@@ -349,7 +349,7 @@ function go(tab, opts) {
 }
 
 /* ===================== CONSULTAS ===================== */
-const SEL = '*, caja_archivos(id,activo,nombre,path,subido_por_nombre,creado_en)';
+const SEL = '*, caja_archivos(id,activo,nombre,path,subido_por,subido_por_nombre,creado_en)';
 async function loadSaldo() { S.saldo = await rpc('caja_saldo'); return S.saldo; }
 function itemMov(m) {
   const ent = m.tipo === 'entrada', an = m.estatus === 'anulado';
@@ -397,7 +397,7 @@ async function viewCaja() {
       ${conEntradas ? `<div class="card sm"><span class="mut">Efectivo en caja según las entradas registradas:</span> <b>${fmt(sd.saldo)}</b></div>` : ''}
       <h3>Últimos movimientos</h3>
       ${rec.length ? rec.map(itemMov).join('') : `<div class="card empty">${ICON.empty}<div>Todavía no hay movimientos.</div></div>`}
-      ${rec.length ? `<div class="r"><button class="btn ghost sm" data-tab-go="mov">Ver todos</button></div>` : ''}`;
+`;
     S._faltan = faltan;
   } catch (e) { $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
 }
@@ -459,9 +459,10 @@ async function openDetail(id) {
     if (!m) throw new Error('Movimiento no encontrado.');
     const { data: bit } = await sb.from('caja_bitacora').select('*').eq('movimiento_id', id).order('creado_en', { ascending: true });
     const ent = m.tipo === 'entrada', an = m.estatus === 'anulado', arch = archAct(m); S._detMov = m;
-    const mio = m.creado_por === S.perfil.id && mxDia(m.creado_en) === hoyMx();
-    const puedeAnular = !an && (esAdmin() || (mio && !m.es_historial));
-    const puedeQuitar = !an && (esAdmin() || mio);
+    // Solo Pedro (puede_archivos) cambia lo de otros; los demás, solo lo suyo y durante 24 horas.
+    const H24 = 24 * 3600 * 1000, reciente = t => Date.now() - new Date(t).getTime() < H24, super_ = !!S.perfil.puede_archivos;
+    const puedeAnular = !an && (super_ || (m.creado_por === S.perfil.id && !m.es_historial && reciente(m.creado_en)));
+    const puedeQuitarA = a => !an && (super_ || (a.subido_por === S.perfil.id && reciente(a.creado_en)));
     openModal(`
       <h2 style="margin-top:0">${ent ? 'Entrada' : 'Gasto'} #${m.numero ?? ''} ${an ? '<span class="chip cancelado">Anulado</span>' : m.es_historial ? '<span class="chip historial">Historial</span>' : ''}</h2>
       <div class="card"><div class="kv">
@@ -477,7 +478,7 @@ async function openDetail(id) {
       </div></div>
       <h3>${ent ? 'Comprobantes' : 'Ticket / comprobante'}</h3>
       <div class="card files">
-        ${arch.length ? arch.map(a => `<div class="row" style="margin-bottom:6px"><button class="lnk" data-act="abrir" data-path="${esc(a.path)}">${esc(a.nombre || 'archivo')}</button><span class="mut sm grow">${esc(a.subido_por_nombre || '')} · ${fdt(a.creado_en)}</span>${puedeQuitar ? `<button class="btn ghost sm" data-act="quitarfile" data-id="${a.id}" data-mov="${m.id}">Quitar</button>` : ''}</div>`).join('') : `<div class="mut">${sinComprobante(m) ? 'Se registró sin comprobante (ver nota).' : m.recibo ? 'Falta la foto del recibo firmado.' : 'Sin archivos.'}</div>`}
+        ${arch.length ? arch.map(a => `<div class="row" style="margin-bottom:6px"><button class="lnk" data-act="abrir" data-path="${esc(a.path)}">${esc(a.nombre || 'archivo')}</button><span class="mut sm grow">${esc(a.subido_por_nombre || '')} · ${fdt(a.creado_en)}</span>${puedeQuitarA(a) ? `<button class="btn ghost sm" data-act="quitarfile" data-id="${a.id}" data-mov="${m.id}">Quitar</button>` : ''}</div>`).join('') : `<div class="mut">${sinComprobante(m) ? 'Se registró sin comprobante (ver nota).' : m.recibo ? 'Falta la foto del recibo firmado.' : 'Sin archivos.'}</div>`}
         ${!an ? `<div style="margin-top:8px"><button class="btn ghost sm" data-act="addfile" data-id="${m.id}">+ ${ent ? 'Agregar comprobante' : m.recibo ? 'Agregar foto del recibo firmado' : 'Agregar ticket'}</button></div>` : ''}
       </div>
       ${puedeAnular ? `<div class="row" style="margin:12px 0"><button class="btn bad" data-act="anular" data-id="${m.id}">Anular movimiento</button></div>` : ''}
