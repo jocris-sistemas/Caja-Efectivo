@@ -25,6 +25,7 @@ html,body{margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4;padding-bottom:84px}
 button,input,select,textarea{font:inherit;color:inherit}
 .hidden{display:none!important}
+.embed header.top{display:none}
 header.top{background:var(--navy);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;border-bottom:3px solid var(--gold)}
 header.top .brand{font-weight:700;letter-spacing:.3px;flex:1}
 header.top .brand small{display:block;font-weight:400;opacity:.75;font-size:11.5px;letter-spacing:0}
@@ -210,6 +211,12 @@ input.autollenado{background:rgba(224,180,74,.16)!important;border-color:#e0b44a
 
 <script>
 /* ===================== CONFIG ===================== */
+// La Caja ahora se abre dentro de Control de Cheques (mismo link y mismo usuario). Si alguien entra por el link viejo, se le manda allá.
+const EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window;
+if (!EMBED && location.protocol === 'https:') { location.replace('../Control-Cheques/#caja'); throw new Error('La Caja ahora está dentro de Control de Cheques'); }
+if (EMBED) document.documentElement.classList.add('embed');
+const avisaPadre = msg => { try { window.parent.postMessage(msg, location.origin === 'null' ? '*' : location.origin); } catch (e) { } };
+if (EMBED) { let ult = 0; ['click', 'keydown', 'touchstart', 'scroll'].forEach(ev => window.addEventListener(ev, () => { const n = Date.now(); if (n - ult > 20000) { ult = n; avisaPadre({ caja: 'actividad' }); } }, { passive: true, capture: true })); }
 const SUPABASE_URL = 'https://hbttxvanyqczspljtqpz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_J4abyTF0BPq47eBTVLjIFQ_5-x2HOiJ';
 const BUCKET = 'cheques-archivos';
@@ -274,6 +281,7 @@ const EYE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke=
 const EYE_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 const pwField = (id, ac) => `<div class="pw"><input type="password" id="${id}" autocomplete="${ac}" autocapitalize="off" autocorrect="off" spellcheck="false" data-nocaps required><button type="button" class="eye" data-act="verpass" data-for="${id}" aria-label="Mostrar u ocultar contraseña">${EYE}</button></div>`;
 function renderLogin(msg = '') {
+  if (EMBED) { $('#app').innerHTML = '<div class="spin">Tu sesión terminó. Vuelve a entrar.</div>'; avisaPadre({ caja: 'sesion' }); return; }
   try { closeModal(); } catch (e) { } document.querySelectorAll('body > .overlay').forEach(o => o.remove());
   $('#app').innerHTML = `
   <div class="login">
