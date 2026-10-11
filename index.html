@@ -239,6 +239,17 @@ const mxDia = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/
 const hoyMx = () => mxDia(new Date());
 const errMsg = e => (e && (e.message || e.error_description)) || String(e);
 const archAct = m => (m.caja_archivos || []).filter(a => a.activo);
+/* Semanas de lunes a domingo (fechas 'AAAA-MM-DD' en UTC para no brincar de día) */
+const addDias = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const diaSem = d => new Date(d + 'T00:00:00Z').getUTCDay();   // 0 = domingo
+const lunesDe = d => addDias(d, -((diaSem(d) + 6) % 7));
+const DIAS_C = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fcorta = d => { const [, m, dd] = d.split('-'); return `${Number(dd)} ${MESES_C[Number(m) - 1]}`; };
+const semTxt = l => { const dom = addDias(l, 6), [y1, m1, d1] = l.split('-'), [y2, m2, d2] = dom.split('-');
+  return m1 === m2 ? `${Number(d1)} al ${Number(d2)} ${MESES_C[Number(m2) - 1]} ${y2}` : `${Number(d1)} ${MESES_C[Number(m1) - 1]}${y1 !== y2 ? ' ' + y1 : ''} al ${Number(d2)} ${MESES_C[Number(m2) - 1]} ${y2}`; };
+const anioSem = l => addDias(l, 3).slice(0, 4);   // el año de la semana es el de su jueves
+const sinRecibo = m => m.recibo && !archAct(m).length;
 const sinComprobante = m => /^SIN COMPROBANTE/i.test(m.nota || '');
 
 function toast(msg, type = '') {
@@ -309,7 +320,7 @@ async function boot() {
 
 /* ===================== SHELL ===================== */
 function renderShell() {
-  const tabs = [['caja', 'Caja'], ['mov', 'Movim.'], ['nuevo', 'Nuevo'], ['arq', 'Arqueo'], ['sem', 'Semanas'], ['bit', 'Bitácora']];
+  const tabs = [['caja', 'Caja'], ['mov', 'Movim.'], ['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['bit', 'Bitácora']];   // Arqueo oculto por ahora
   $('#app').innerHTML = `
   <header class="top">
     <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
@@ -340,7 +351,7 @@ function itemMov(m) {
     <div class="main"><div class="hl">${esc(titulo)}</div><div class="hl2" style="font-size:14px">${sub}</div>
       <div class="mut sm" style="margin-top:3px">${fdate(m.fecha)} · ${esc(m.creado_por_nombre || '')}</div></div>
     <div class="side"><span class="money ${ent ? 'pos' : ''}">${ent ? '+' : '−'}${fmt(m.monto)}</span>
-      ${an ? '<span class="chip cancelado">Anulado</span>' : m.es_historial ? '<span class="chip historial">Historial</span>' : sinT ? '<span class="chip sin">Sin ticket</span>' : ent ? '<span class="chip ent">Entrada</span>' : '<span class="chip gas">Gasto</span>'}</div></div>`;
+      ${an ? '<span class="chip cancelado">Anulado</span>' : m.es_historial ? '<span class="chip historial">Historial</span>' : sinT ? `<span class="chip sin">${m.recibo ? 'Falta recibo firmado' : 'Sin ticket'}</span>` : ent ? '<span class="chip ent">Entrada</span>' : '<span class="chip gas">Gasto</span>'}</div></div>`;
 }
 
 /* ===================== VISTA: CAJA (resumen) ===================== */
@@ -348,30 +359,33 @@ async function viewCaja() {
   $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
   try {
     const sd = await loadSaldo();
-    const ym = hoyMx().slice(0, 7); const [y, m] = ym.split('-').map(Number);
+    const hoy = hoyMx(), lun = lunesDe(hoy), lunAnt = addDias(lun, -7);
+    const ym = hoy.slice(0, 7); const [y, m] = ym.split('-').map(Number);
     const nx = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
-    const mes = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').gte('fecha', ym + '-01').lt('fecha', nx).order('fecha', { ascending: false })).data || [];
-    const ent = mes.filter(x => x.tipo === 'entrada').reduce((a, x) => a + cents(x.monto), 0) / 100;
-    const gas = mes.filter(x => x.tipo === 'gasto').reduce((a, x) => a + cents(x.monto), 0) / 100;
-    const porCargo = {}; mes.filter(x => x.tipo === 'gasto').forEach(x => porCargo[x.cargo_id] = (porCargo[x.cargo_id] || 0) + cents(x.monto) / 100);
-    const arr = Object.entries(porCargo).sort((a, b) => b[1] - a[1]); const mx = arr.length ? arr[0][1] : 1;
+    const desde = lunAnt < ym + '-01' ? lunAnt : ym + '-01';
+    const movs = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').gte('fecha', desde).lt('fecha', nx > addDias(lun, 7) ? nx : addDias(lun, 7)).order('fecha', { ascending: false })).data || [];
     const rec = (await sb.from('caja_movimientos').select(SEL).order('creado_en', { ascending: false }).limit(8)).data || [];
-    const sinT = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(300)).data || [];
+    const sinT = (await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(1000)).data || [];
     if (S.tab !== 'caja') return;
+    const gas = movs.filter(x => x.tipo === 'gasto' && !x.es_historial), suma = arr => arr.reduce((a, x) => a + cents(x.monto), 0) / 100;
+    const sem = gas.filter(x => x.fecha >= lun && x.fecha <= addDias(lun, 6)), semAnt = gas.filter(x => x.fecha >= lunAnt && x.fecha < lun);
+    const mesG = gas.filter(x => x.fecha >= ym + '-01' && x.fecha < nx), mesE = movs.filter(x => x.tipo === 'entrada' && x.fecha >= ym + '-01' && x.fecha < nx);
+    const porCargo = {}; sem.forEach(x => porCargo[x.cargo_id] = (porCargo[x.cargo_id] || 0) + cents(x.monto) / 100);
+    const arr = Object.entries(porCargo).sort((a, b) => b[1] - a[1]); const mx = arr.length ? arr[0][1] : 1;
     const faltan = sinT.filter(x => !archAct(x).length && !sinComprobante(x));
-    const aq = sd.arqueo;
-    const aqTxt = aq ? (cents(aq.diferencia) === 0 ? `<span class="pos">sin diferencia</span>` : `<span class="neg">diferencia ${fmt(aq.diferencia)}</span>`) : '';
+    const tSem = suma(sem), tAnt = suma(semAnt), conEntradas = Number(sd.entradas || 0) > 0;
     $('#view').innerHTML = `
-      <div class="saldo"><div class="lbl">Efectivo en caja</div><div class="num">${fmt(sd.saldo)}</div>
-        <div class="sub2">${aq ? `Último arqueo: ${fdate(aq.fecha)} · contado ${fmt(aq.efectivo_contado)}` : 'Aún no hay arqueos registrados'}</div></div>
+      <div class="saldo"><div class="lbl">Gasto de esta semana</div><div class="num">${fmt(tSem)}</div>
+        <div class="sub2">Del ${esc(semTxt(lun))} · ${sem.length} gasto(s) · semana pasada ${fmt(tAnt)}</div></div>
       <div class="row" style="margin-bottom:12px">
         <button class="btn gold grow bigbtn" data-act="nuevo" data-tipo="gasto">− Nuevo gasto</button>
-        <button class="btn ok grow bigbtn" data-act="nuevo" data-tipo="entrada">+ Nueva entrada</button></div>
-      ${aq && cents(aq.diferencia) !== 0 ? `<div class="warnbox">El último arqueo (${fdate(aq.fecha)}) tuvo una diferencia de <b>${fmt(aq.diferencia)}</b>.</div>` : ''}
-      ${faltan.length ? `<div class="warnbox"><b>${faltan.length}</b> gasto(s) sin ticket. <a href="#" data-act="faltantes" style="color:inherit;font-weight:700">Verlos</a></div>` : ''}
+        <button class="btn ghost" style="flex:none" data-act="nuevo" data-tipo="entrada">+ Entrada</button></div>
+      ${faltan.length ? `<div class="warnbox"><b>${faltan.length}</b> gasto(s) sin ticket o sin foto del recibo firmado. <a href="#" data-act="faltantes" style="color:inherit;font-weight:700">Verlos</a></div>` : ''}
+      ${arr.length ? `<div class="card bars"><div class="b" style="margin-bottom:4px">Esta semana por cargo</div>${arr.map(([id, v]) => `<div class="br"><div class="n">${esc(cargoNombre(Number(id)))}</div><div class="bar"><i style="width:${Math.max(3, Math.round(v / mx * 100))}%"></i></div><div class="m">${fmt(v)}</div></div>`).join('')}</div>` : ''}
+      <div class="r" style="margin:-4px 0 6px"><button class="btn ghost sm" data-tab-go="sem">Ver todas las semanas</button></div>
       <h3>${esc(mesTxt(ym))}</h3>
-      <div class="statgrid"><div class="stat in"><div class="l">Entradas</div><div class="v">${fmt(ent)}</div></div><div class="stat out"><div class="l">Gastos</div><div class="v">${fmt(gas)}</div></div></div>
-      ${arr.length ? `<div class="card bars"><div class="b" style="margin-bottom:4px">Gastos del mes por cargo</div>${arr.map(([id, v]) => `<div class="br"><div class="n">${esc(cargoNombre(Number(id)))}</div><div class="bar"><i style="width:${Math.max(3, Math.round(v / mx * 100))}%"></i></div><div class="m">${fmt(v)}</div></div>`).join('')}</div>` : ''}
+      <div class="statgrid"><div class="stat out"><div class="l">Gastos del mes</div><div class="v">${fmt(suma(mesG))}</div></div>${conEntradas ? `<div class="stat in"><div class="l">Entradas del mes</div><div class="v">${fmt(suma(mesE))}</div></div>` : `<div class="stat"><div class="l">Gastos registrados</div><div class="v" style="font-size:20px">${mesG.length}</div></div>`}</div>
+      ${conEntradas ? `<div class="card sm"><span class="mut">Efectivo en caja según las entradas registradas:</span> <b>${fmt(sd.saldo)}</b></div>` : ''}
       <h3>Últimos movimientos</h3>
       ${rec.length ? rec.map(itemMov).join('') : `<div class="card empty">${ICON.empty}<div>Todavía no hay movimientos.</div></div>`}
       ${rec.length ? `<div class="r"><button class="btn ghost sm" data-tab-go="mov">Ver todos</button></div>` : ''}`;
@@ -435,7 +449,7 @@ async function openDetail(id) {
     const { data: m } = await sb.from('caja_movimientos').select(SEL).eq('id', id).maybeSingle();
     if (!m) throw new Error('Movimiento no encontrado.');
     const { data: bit } = await sb.from('caja_bitacora').select('*').eq('movimiento_id', id).order('creado_en', { ascending: true });
-    const ent = m.tipo === 'entrada', an = m.estatus === 'anulado', arch = archAct(m);
+    const ent = m.tipo === 'entrada', an = m.estatus === 'anulado', arch = archAct(m); S._detMov = m;
     const mio = m.creado_por === S.perfil.id && mxDia(m.creado_en) === hoyMx();
     const puedeAnular = !an && (esAdmin() || (mio && !m.es_historial));
     const puedeQuitar = !an && (esAdmin() || mio);
@@ -448,13 +462,14 @@ async function openDetail(id) {
         <div>${ent ? 'Origen' : 'Proveedor'}</div><div>${esc(m.proveedor || '—')}</div>
         <div>Concepto</div><div>${esc(m.concepto || '—')}</div>
         ${m.nota ? `<div>Nota</div><div>${esc(m.nota)}</div>` : ''}
+        ${m.recibo ? `<div>Recibo</div><div>Recibe: <b>${esc(m.recibo_recibe || '')}</b><br>Entrega: ${esc(m.recibo_entrega || '')}${!an ? `<div style="margin-top:6px"><button class="btn gold sm" data-act="imprecibo" data-id="${m.id}">Imprimir recibo</button></div>` : ''}</div>` : ''}
         <div>Capturó</div><div>${esc(m.creado_por_nombre || '')}<div class="mut sm">${fdt(m.creado_en)}</div></div>
         ${an ? `<div>Anulado por</div><div>${esc(m.anulado_por_nombre || '')}<div class="mut sm">${fdt(m.anulado_en)}</div></div><div>Motivo</div><div>${esc(m.motivo_anulacion || '')}</div>` : ''}
       </div></div>
       <h3>${ent ? 'Comprobantes' : 'Ticket / comprobante'}</h3>
       <div class="card files">
-        ${arch.length ? arch.map(a => `<div class="row" style="margin-bottom:6px"><button class="lnk" data-act="abrir" data-path="${esc(a.path)}">${esc(a.nombre || 'archivo')}</button><span class="mut sm grow">${esc(a.subido_por_nombre || '')} · ${fdt(a.creado_en)}</span>${puedeQuitar ? `<button class="btn ghost sm" data-act="quitarfile" data-id="${a.id}" data-mov="${m.id}">Quitar</button>` : ''}</div>`).join('') : `<div class="mut">${sinComprobante(m) ? 'Se registró sin comprobante (ver nota).' : 'Sin archivos.'}</div>`}
-        ${!an ? `<div style="margin-top:8px"><button class="btn ghost sm" data-act="addfile" data-id="${m.id}">+ ${ent ? 'Agregar comprobante' : 'Agregar ticket'}</button></div>` : ''}
+        ${arch.length ? arch.map(a => `<div class="row" style="margin-bottom:6px"><button class="lnk" data-act="abrir" data-path="${esc(a.path)}">${esc(a.nombre || 'archivo')}</button><span class="mut sm grow">${esc(a.subido_por_nombre || '')} · ${fdt(a.creado_en)}</span>${puedeQuitar ? `<button class="btn ghost sm" data-act="quitarfile" data-id="${a.id}" data-mov="${m.id}">Quitar</button>` : ''}</div>`).join('') : `<div class="mut">${sinComprobante(m) ? 'Se registró sin comprobante (ver nota).' : m.recibo ? 'Falta la foto del recibo firmado.' : 'Sin archivos.'}</div>`}
+        ${!an ? `<div style="margin-top:8px"><button class="btn ghost sm" data-act="addfile" data-id="${m.id}">+ ${ent ? 'Agregar comprobante' : m.recibo ? 'Agregar foto del recibo firmado' : 'Agregar ticket'}</button></div>` : ''}
       </div>
       ${puedeAnular ? `<div class="row" style="margin:12px 0"><button class="btn bad" data-act="anular" data-id="${m.id}">Anular movimiento</button></div>` : ''}
       <h3>Bitácora</h3><div>${(bit || []).map(b => `<div class="log"><b>${esc(b.accion.replace(/_/g, ' '))}</b> · ${esc(b.usuario_nombre || '')}<br><span class="mut">${fdt(b.creado_en)}</span></div>`).join('') || '<span class="mut">Sin registros</span>'}</div>`);
@@ -796,7 +811,7 @@ function autoLlenarTicket(F, forzar) {
     if (!v[id] || (!forzar && F.tkToc.has(id))) return;
     const e = $('#' + id); if (!e) return; e.value = v[id]; F.tkAuto.add(id); F.tkToc.delete(id);
   });
-  marcaAuto();
+  marcaAuto(); pintaSemInfo();
 }
 function pintaLecturaTicket() {
   const box = $('#tkLee'), F = S.F; if (!box || !F) return;
@@ -839,11 +854,12 @@ async function viewNuevo(opts) {
 function pintaForm() {
   const F = S.F, g = F.tipo === 'gasto';
   $('#view').innerHTML = `
-    <div class="pagehead"><h2>Nuevo movimiento</h2><span class="sub">Saldo actual: <b>${fmt(S.saldo.saldo)}</b></span></div>
+    <div class="pagehead"><h2>Nuevo movimiento</h2>${Number(S.saldo.entradas || 0) > 0 ? `<span class="sub">Efectivo en caja: <b>${fmt(S.saldo.saldo)}</b></span>` : ''}</div>
     <div class="seg"><button class="g ${g ? 'on' : ''}" data-act="tipo" data-tipo="gasto">− Gasto</button><button class="e ${!g ? 'on' : ''}" data-act="tipo" data-tipo="entrada">+ Entrada</button></div>
     <div class="card">
       <div class="grid2"><div><label class="f">Fecha</label><input type="date" id="fFecha" value="${today()}" max="${today()}"></div>
         <div><label class="f">Monto</label><input type="text" id="fMonto" inputmode="decimal" placeholder="0.00" autocomplete="off"></div></div>
+      <div id="fSemInfo" class="mut sm" style="margin-top:6px"></div>
       ${g ? `
         <label class="f">Cargo (a quién se le carga)</label>
         <select id="fCargo"><option value="">— Elige —</option>${S.cargos.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select>
@@ -852,6 +868,8 @@ function pintaForm() {
         <div id="folioMsg"></div>
         <label class="f">Concepto (en qué se gastó)</label><input type="text" id="fConc" autocomplete="off" placeholder="Ej. GASOLINA, COMIDA OBRA, PAPELERÍA…">
         <label class="f">Nota (opcional)</label><textarea id="fNota" style="min-height:52px"></textarea>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:15px"><input type="checkbox" id="fRec" ${F.rec ? 'checked' : ''} style="width:auto"> <b>Este gasto lleva recibo firmado</b></label>
+        <div id="recBox"></div>
         <h3>Ticket / comprobante</h3>
         <div id="ticketBox"></div><div id="tkLee"></div>`
       : `
@@ -864,7 +882,8 @@ function pintaForm() {
   pintaTicket();
   Object.keys(TK_CAMPOS).forEach(id => { const e = $('#' + id); if (!e) return;
     e.addEventListener('input', ev => { if (!ev.isTrusted) return; F.tkToc = F.tkToc || new Set(); F.tkToc.add(id); if (F.tkAuto) F.tkAuto.delete(id); e.classList.remove('autollenado'); if (F.tkLectura) pintaLecturaTicket(); }); });
-  marcaAuto(); pintaLecturaTicket();
+  marcaAuto(); pintaLecturaTicket(); pintaRecibo(); pintaSemInfo();
+  $('#fFecha').addEventListener('input', pintaSemInfo); $('#fFecha').addEventListener('change', pintaSemInfo);
   if (g) {
     const ck = () => revisaFolio();
     $('#fFolio').onblur = ck; $('#fCargo').onchange = ck; $('#fFolio').oninput = () => { F.folioDup = ''; $('#folioMsg').innerHTML = ''; };
@@ -874,9 +893,9 @@ function pintaTicket() {
   const F = S.F, g = F.tipo === 'gasto', box = $('#ticketBox'); if (!box) return;
   box.innerHTML = `
     <button class="btn ghost" data-act="pickticket" style="width:100%">📷 ${F.files.length ? 'Agregar más fotos' : (g ? 'Tomar foto / subir ticket' : 'Tomar foto / subir comprobante')}</button>
-    <div class="mut sm" id="tkInfo" style="margin-top:6px">${F.files.length ? F.files.length + ' archivo(s) listo(s) para subir' : (g ? 'Obligatorio, salvo que marques que no hay comprobante.' : 'Sin adjuntar')}</div>
+    <div class="mut sm" id="tkInfo" style="margin-top:6px">${F.files.length ? F.files.length + ' archivo(s) listo(s) para subir' : (g ? (F.rec ? 'Opcional por ahora: cuando el recibo esté firmado, súbele la foto aquí o después desde el detalle del gasto.' : 'Obligatorio, salvo que marques que no hay comprobante.') : 'Sin adjuntar')}</div>
     ${F.files.length ? `<div class="thumbs">${F.files.map(f => f.type.startsWith('image/') ? `<img src="${URL.createObjectURL(f)}">` : `<span class="chip">${esc(f.name)}</span>`).join('')}</div><div style="margin-top:6px"><button class="btn ghost sm" data-act="limpiarticket">Quitar fotos</button></div>` : ''}
-    ${g && !F.files.length ? `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px"><input type="checkbox" id="fSinT" ${F.sinT ? 'checked' : ''} data-act="sint"> No hay comprobante (explícalo)</label>
+    ${g && !F.files.length && !F.rec ? `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px"><input type="checkbox" id="fSinT" ${F.sinT ? 'checked' : ''} data-act="sint"> No hay comprobante (explícalo)</label>
       ${F.sinT ? `<input type="text" id="fMotivoT" placeholder="¿Por qué no hay ticket?" value="${esc(F.motivoT || '')}" style="margin-top:6px">` : ''}` : ''}`;
 }
 async function revisaFolio() {
@@ -890,13 +909,74 @@ async function revisaFolio() {
   else if ((b.data || []).length) F.folioDup = `El folio ${folio} de ${cargoNombre(cargo)} ya se usó en otro gasto de la caja.`;
   if (box && F.folioDup) box.innerHTML = `<div class="warnbox">${esc(F.folioDup)} No se puede repetir.</div>`;
 }
+// Semana a la que va el gasto (lunes a domingo). Lo pagado el sábado o domingo va en esa semana aunque se capture el lunes.
+function pintaSemInfo() {
+  const el = $('#fSemInfo'), f = $('#fFecha')?.value; if (!el) return;
+  if (!f) { el.innerHTML = ''; return; }
+  const sab = addDias(f, -2);
+  el.innerHTML = `Va en la semana del <b>${esc(semTxt(lunesDe(f)))}</b>.` + (diaSem(f) === 1 ? ` <a href="#" data-act="fsab" data-f="${sab}" style="color:var(--navy2);font-weight:700">¿Se pagó el sábado? Pasarlo al sáb ${esc(fcorta(sab))} (semana anterior)</a>` : '');
+}
+function recEntregaDef() { try { return localStorage.getItem('caja_rec_entrega') || ''; } catch (e) { return ''; } }
+function pintaRecibo() {
+  const F = S.F, box = $('#recBox'); if (!box || !F) return;
+  if (!F.rec) { box.innerHTML = ''; return; }
+  if (F.recEntrega == null) F.recEntrega = recEntregaDef() || String(S.perfil.nombre || '').toUpperCase();
+  box.innerHTML = `<div class="grid2"><div><label class="f">Recibe el dinero (nombre completo)</label><input type="text" id="fRecRecibe" autocomplete="off" value="${esc(F.recRecibe || '')}" placeholder="Quien firma el recibo"></div>
+      <div><label class="f">Lo entrega (de parte de)</label><input type="text" id="fRecEntrega" autocomplete="off" value="${esc(F.recEntrega || '')}"></div></div>
+    <div class="mut sm" style="margin-top:6px">Al guardar podrás imprimir el recibo con la cantidad en número y en letra. Ya firmado, súbele la foto.</div>`;
+}
+function numALetras(n) {
+  const U = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE', 'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE', 'VEINTE', 'VEINTIUNO', 'VEINTIDÓS', 'VEINTITRÉS', 'VEINTICUATRO', 'VEINTICINCO', 'VEINTISÉIS', 'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE'];
+  const D = ['', '', '', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+  const C = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+  const m1000 = x => { if (!x) return ''; if (x === 100) return 'CIEN'; const c = Math.floor(x / 100), r = x % 100; const t = !r ? '' : r < 30 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? ' Y ' + U[r % 10] : ''); return [C[c], t].filter(Boolean).join(' '); };
+  const apoc = s => s.replace(/VEINTIUNO$/, 'VEINTIÚN').replace(/UNO$/, 'UN');
+  const tc = Math.round(Math.abs(Number(n) || 0) * 100), ent = Math.floor(tc / 100), cts = tc % 100;
+  const mill = Math.floor(ent / 1e6), miles = Math.floor((ent % 1e6) / 1000), resto = ent % 1000, p = [];
+  if (mill) p.push(mill === 1 ? 'UN MILLÓN' : apoc(m1000(mill)) + ' MILLONES');
+  if (miles) p.push(miles === 1 ? 'MIL' : apoc(m1000(miles)) + ' MIL');
+  if (resto) p.push(apoc(m1000(resto)));
+  const txt = ent ? p.join(' ') + (ent % 1e6 === 0 ? ' DE' : '') : 'CERO';
+  return `${txt} ${ent === 1 ? 'PESO' : 'PESOS'} ${String(cts).padStart(2, '0')}/100 M.N.`;
+}
+function reciboPDF(m) {
+  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'letter' });
+  const W = 215.9, H = 279.4, M = 18, recibe = String(m.recibo_recibe || ''), entrega = String(m.recibo_entrega || '');
+  const bloque = (y0, etiqueta) => {
+    doc.setDrawColor(20, 52, 92); doc.setLineWidth(0.6); doc.roundedRect(M - 6, y0 + 9, W - 2 * (M - 6), 121, 3, 3);
+    doc.setTextColor(20, 52, 92); doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text('JOCRIS', M, y0 + 23);   // aquí irá el logo
+    doc.setFontSize(17); doc.text('RECIBO', W / 2, y0 + 23, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90, 98, 110);
+    doc.text(`No. ${m.numero ?? ''}`, W - M, y0 + 18.5, { align: 'right' }); doc.text(etiqueta, W - M, y0 + 23.5, { align: 'right' });
+    doc.setFillColor(238, 242, 248); doc.roundedRect(W - M - 66, y0 + 29, 66, 11, 2, 2, 'F');
+    doc.setTextColor(27, 36, 48); doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.text('BUENO POR ' + fmt(m.monto), W - M - 33, y0 + 36.4, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.text(`Monterrey, N.L., a ${fdia(m.fecha)}.`, M, y0 + 36.4);
+    const cuerpo = `Yo, ${recibe}, recibí de parte de ${entrega} la cantidad de ${fmt(m.monto)} (${numALetras(m.monto)}) por concepto de ${String(m.concepto || '').toUpperCase()}.`;
+    doc.setFontSize(12.5); doc.text(doc.splitTextToSize(cuerpo, W - 2 * M), M, y0 + 53, { lineHeightFactor: 1.55 });
+    const fy = y0 + 105; doc.setDrawColor(27, 36, 48); doc.setLineWidth(0.3); doc.line(W / 2 - 48, fy, W / 2 + 48, fy);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(recibe, W / 2, fy + 5.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90, 98, 110); doc.text('Nombre y firma de quien recibe', W / 2, fy + 10, { align: 'center' });
+    doc.setFontSize(8); doc.text(`Cargo: ${cargoNombre(m.cargo_id)}${m.folio_numero ? ' · Folio ' + m.folio_numero : ''} · Gasto de caja #${m.numero ?? ''}`, M, y0 + 126);
+  };
+  bloque(0, 'ORIGINAL');
+  doc.setDrawColor(150); doc.setLineWidth(0.2); doc.setLineDashPattern([2, 2], 0); doc.line(6, H / 2, W - 6, H / 2); doc.setLineDashPattern([], 0);
+  bloque(H / 2, 'COPIA');
+  return doc;
+}
+function imprimirRecibo(m) {
+  const doc = reciboPDF(m); try { doc.autoPrint({ variant: 'non-conform' }); } catch (e) { }
+  const nombre = `Recibo_${m.numero ?? ''}_${String(m.recibo_recibe || '').replace(/[^A-Za-z0-9]+/g, '_')}.pdf`;
+  let w = null; try { w = window.open(doc.output('bloburl'), '_blank'); } catch (e) { }
+  if (!w) doc.save(nombre);
+}
 function leeForm() {
   const F = S.F, g = F.tipo === 'gasto';
   const monto = parseMoney($('#fMonto').value);
   return { tipo: F.tipo, fecha: $('#fFecha').value, monto, cargo: g ? Number($('#fCargo').value || 0) : null,
     folio: g ? ($('#fFolio').value.trim().toUpperCase() || null) : null, proveedor: ($('#fProv').value.trim().toUpperCase() || null),
     concepto: $('#fConc').value.trim().toUpperCase(), nota: ($('#fNota').value.trim().toUpperCase() || null),
-    sinT: g && !F.files.length && !!$('#fSinT')?.checked, motivoT: ($('#fMotivoT')?.value || '').trim().toUpperCase() };
+    sinT: g && !F.files.length && !F.rec && !!$('#fSinT')?.checked, motivoT: ($('#fMotivoT')?.value || '').trim().toUpperCase(),
+    rec: g && !!F.rec, recRecibe: g && F.rec ? ($('#fRecRecibe')?.value || '').trim().toUpperCase() : '', recEntrega: g && F.rec ? ($('#fRecEntrega')?.value || '').trim().toUpperCase() : '' };
 }
 async function revisar() {
   const F = S.F; if (F.enviando) return; const d = leeForm(), g = d.tipo === 'gasto';
@@ -905,9 +985,12 @@ async function revisar() {
   if (!(d.monto > 0)) err.push('Escribe un monto mayor a cero.'); else if (Math.abs(d.monto * 100 - Math.round(d.monto * 100)) > 1e-6) err.push('El monto solo puede tener 2 decimales.');
   if (g && !d.cargo) err.push('Elige el cargo.');
   if (!d.concepto) err.push(g ? 'Escribe el concepto del gasto.' : 'Escribe de dónde viene el efectivo.');
-  if (g && !F.files.length && !d.sinT) err.push('Sube la foto del ticket (o marca que no hay comprobante).');
+  if (d.rec && !d.recRecibe) err.push('Escribe el nombre de quien recibe el dinero (para el recibo).');
+  if (d.rec && !d.recEntrega) err.push('Escribe de parte de quién se entrega el dinero (para el recibo).');
+  if (d.rec && !d.proveedor) d.proveedor = d.recRecibe;
+  if (g && !F.files.length && !d.sinT && !d.rec) err.push('Sube la foto del ticket (o marca que no hay comprobante).');
   if (g && d.sinT && !d.motivoT) err.push('Explica por qué no hay ticket.');
-  if (g) { await revisaFolio(); if (F.folioDup) err.push(F.folioDup); if (d.monto > S.saldo.saldo) err.push(`No alcanza el efectivo: hay ${fmt(S.saldo.saldo)} en caja.`); }
+  if (g) { await revisaFolio(); if (F.folioDup) err.push(F.folioDup); }
   if (err.length) return toast(err[0], 'err');
   // posibles duplicados
   let dup = [];
@@ -915,7 +998,7 @@ async function revisar() {
     const r = await sb.from('caja_movimientos').select('numero,proveedor,concepto,creado_por_nombre').eq('tipo', d.tipo).eq('fecha', d.fecha).eq('monto', d.monto).eq('estatus', 'vigente');
     dup = r.data || [];
   } catch (e) {}
-  const nuevoSaldo = g ? S.saldo.saldo - d.monto : S.saldo.saldo + d.monto;
+  const nuevoSaldo = g ? S.saldo.saldo - d.monto : S.saldo.saldo + d.monto, conEnt = Number(S.saldo.entradas || 0) > 0 || !g;
   F.d = d;
   openModal(`<h2 style="margin-top:0">Confirma ${g ? 'el gasto' : 'la entrada'}</h2>
     <div class="card"><div class="kv">
@@ -924,8 +1007,11 @@ async function revisar() {
       ${g ? `<div>Cargo</div><div class="b">${esc(cargoNombre(d.cargo))}</div><div>Folio</div><div>${d.folio ? esc(d.folio) : '<span class="mut">Sin folio</span>'}</div>` : ''}
       <div>${g ? 'Proveedor' : 'Origen'}</div><div>${esc(d.proveedor || '—')}</div>
       <div>Concepto</div><div>${esc(d.concepto)}</div>
-      <div>${g ? 'Ticket' : 'Comprobante'}</div><div>${F.files.length ? F.files.length + ' archivo(s)' : (d.sinT ? 'Sin comprobante: ' + esc(d.motivoT) : '—')}</div>
-      <div>Saldo después</div><div class="money">${fmt(nuevoSaldo)}</div></div></div>
+      ${d.rec ? `<div>Recibo</div><div>Recibe <b>${esc(d.recRecibe)}</b>, de parte de ${esc(d.recEntrega)}</div>` : ''}
+      <div>${g ? 'Ticket' : 'Comprobante'}</div><div>${F.files.length ? F.files.length + ' archivo(s)' : (d.sinT ? 'Sin comprobante: ' + esc(d.motivoT) : d.rec ? 'Se sube la foto del recibo ya firmado' : '—')}</div>
+      <div>Semana</div><div>Del ${esc(semTxt(lunesDe(d.fecha)))}</div>
+      ${conEnt ? `<div>Efectivo en caja después</div><div class="money">${fmt(nuevoSaldo)}</div>` : ''}</div></div>
+    ${conEnt && nuevoSaldo < 0 ? `<div class="warnbox">Según las entradas registradas, el efectivo quedaría en ${fmt(nuevoSaldo)}. Si hubo una reposición que no se capturó, regístrala como entrada.</div>` : ''}
     ${dup.length ? `<div class="warnbox"><b>Ojo:</b> ya hay ${dup.length} ${d.tipo} vigente(s) con la misma fecha y el mismo monto (${dup.map(x => '#' + x.numero + ' ' + esc(x.proveedor || x.concepto || '')).join(', ')}). Verifica que no estés duplicando.</div>` : ''}
     <div class="row" style="margin-top:12px"><button class="btn ${g ? 'gold' : 'ok'} grow" id="btnGuardar" data-act="guardar">Guardar</button><button class="btn ghost" data-act="close">Corregir</button></div>`);
 }
@@ -936,13 +1022,17 @@ async function guardar() {
   const notaTxt = d.sinT ? ['SIN COMPROBANTE: ' + d.motivoT, d.nota].filter(Boolean).join(' · ') : (d.nota || null);
   try {
     const mov = await rpc('caja_registrar', { p: { tipo: d.tipo, fecha: d.fecha, monto: d.monto, cargo_id: g ? d.cargo : null, folio_numero: d.folio, proveedor: d.proveedor,
-      concepto: d.concepto, nota: notaTxt, clave_submision: F.clave } });
+      concepto: d.concepto, nota: notaTxt, clave_submision: F.clave, recibo: d.rec, recibo_recibe: d.recRecibe || null, recibo_entrega: d.recEntrega || null } });
+    S.hist = null;
+    if (d.rec) { try { localStorage.setItem('caja_rec_entrega', d.recEntrega); } catch (e) { } }
     let aviso = '';
     if (F.files.length && !(mov.duplicado && (mov.caja_archivos || []).some(a => a.activo))) {
       try { await subirArchivo(mov.id, F.files); } catch (e) { aviso = 'El movimiento se guardó, pero NO se pudo subir el ticket (' + errMsg(e) + '). Ábrelo y agrégalo.'; }
     }
     closeModal(); S.F = null;
     if (aviso) { toast(aviso, 'err'); go('mov'); setTimeout(() => openDetail(mov.id), 300); }
+    else if (d.rec) { S._recMov = mov; go('caja'); openModal(`<h2 style="margin-top:0">Gasto guardado</h2><div class="okbox">Imprime el recibo para que lo firme <b>${esc(d.recRecibe)}</b>. Ya firmado, súbele la foto desde el detalle del gasto.</div>
+      <div class="row" style="margin-top:12px"><button class="btn gold grow" data-act="imprecibo" data-id="${mov.id}">Imprimir recibo</button><button class="btn ghost" data-act="detalle" data-id="${mov.id}">Ver gasto</button></div>`); }
     else { toast(g ? 'Gasto guardado.' : 'Entrada guardada.', 'ok'); go('caja'); }
   } catch (e) {
     F.enviando = false; closeModal(); toast(errMsg(e), 'err');
@@ -985,17 +1075,20 @@ const MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 const fsem = d => { const [y, m, dd] = d.split('-'); return `${Number(dd)} ${MES_C[Number(m) - 1]} ${y}`; };
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 const ordGrupo = g => { const i = GRUPOS_ORD.indexOf(g); return i < 0 ? 99 : i; };
+const lineaSem = (r, conSemana) => `<div class="sl"><div class="c">${esc(r.concepto || '')}<small>${r.fecha ? esc(DIAS_C[diaSem(r.fecha)] + ' ' + fcorta(r.fecha)) + ' · ' : ''}${r.folio ? 'Folio ' + esc(r.folio) + ' · ' : ''}${esc(r.grupo || '')}${conSemana ? ' · semana del ' + esc(semTxt(r.semana)) : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div><div class="m">${fmt(r.importe)}</div></div>`;
+const hojaTxt = w => w.hojas && w.hojas.size ? 'hoja de Excel del ' + [...w.hojas].map(d => DIAS_C[diaSem(d)] + ' ' + fcorta(d)).join(', ') : '';
+// Junta el historial del Excel con los gastos capturados en la app, por semana de lunes a domingo.
 async function cargarHist(force) {
   if (S.hist && !force) return S.hist;
-  let all = [], from = 0;
-  for (;;) {
-    const { data, error } = await sb.from('caja_historial_semanal').select('semana,orden,folio,grupo,concepto,importe,nota')
-      .order('semana', { ascending: true }).order('orden', { ascending: true }).order('id', { ascending: true }).range(from, from + 999);
-    if (error) throw error;
-    all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
-  }
+  const trae = async mk => { let all = [], from = 0; for (;;) { const { data, error } = await mk().range(from, from + 999); if (error) throw error; all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000; } return all; };
+  const [h, g] = await Promise.all([
+    trae(() => sb.from('caja_historial_semanal').select('semana,orden,folio,grupo,concepto,importe,nota').order('semana', { ascending: true }).order('orden', { ascending: true }).order('id', { ascending: true })),
+    trae(() => sb.from('caja_movimientos').select('id,numero,fecha,monto,cargo_id,folio_numero,proveedor,concepto,nota').eq('tipo', 'gasto').eq('estatus', 'vigente').eq('es_historial', false).order('fecha', { ascending: true }).order('id', { ascending: true }))]);
+  // El Excel trae cada semana con la fecha de su hoja (casi siempre viernes): se acomoda en su semana de lunes a domingo.
+  const all = h.map(r => ({ ...r, hoja: r.semana, semana: lunesDe(r.semana), origen: 'excel' }))
+    .concat(g.map(m => ({ semana: lunesDe(m.fecha), fecha: m.fecha, folio: m.folio_numero || '', grupo: cargoNombre(m.cargo_id), concepto: [m.concepto, m.proveedor].filter(Boolean).join(' · '), importe: Number(m.monto), nota: m.nota || '', origen: 'app', id: m.id, numero: m.numero })));
   const by = {};
-  all.forEach(r => { const w = by[r.semana] || (by[r.semana] = { semana: r.semana, c: 0, rows: [] }); w.c += cents(r.importe); w.rows.push(r); });
+  all.forEach(r => { const w = by[r.semana] || (by[r.semana] = { semana: r.semana, c: 0, rows: [], hojas: new Set(), nApp: 0 }); w.c += cents(r.importe); w.rows.push(r); if (r.hoja) w.hojas.add(r.hoja); if (r.origen === 'app') w.nApp++; });
   S.hist = all; S.semanas = Object.values(by).sort((a, b) => a.semana < b.semana ? 1 : -1);
   return all;
 }
@@ -1003,32 +1096,31 @@ function gruposDe(w) {
   const g = {}; w.rows.forEach(r => { const k = r.grupo || 'OTROS'; (g[k] || (g[k] = { nombre: k, c: 0, rows: [] })); g[k].c += cents(r.importe); g[k].rows.push(r); });
   return Object.values(g).sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
 }
-const lineaSem = (r, conSemana) => `<div class="sl"><div class="c">${esc(r.concepto || '')}<small>${r.folio ? 'Folio ' + esc(r.folio) + ' · ' : ''}${esc(r.grupo || '')}${conSemana ? ' · semana del ' + esc(fsem(r.semana)) : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div><div class="m">${fmt(r.importe)}</div></div>`;
 async function viewSem() {
   $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
   try { await cargarHist(); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
   if (S.tab !== 'sem') return;
-  if (!S.semanas.length) return $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal</h2></div><div class="card empty">${ICON.empty}<div>Todavía no hay historial cargado.</div></div>`;
+  if (!S.semanas.length) return $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal</h2></div><div class="card empty">${ICON.empty}<div>Todavía no hay gastos ni historial.</div></div>`;
   const w = S.semSel && S.semanas.find(x => x.semana === S.semSel);
   if (w) return viewSemDet(w);
   const tot = S.semanas.reduce((a, x) => a + x.c, 0), n = S.semanas.length;
   const mxW = S.semanas.reduce((a, x) => x.c > a.c ? x : a), mnW = S.semanas.reduce((a, x) => x.c < a.c ? x : a);
   const gy = {}; S.hist.forEach(r => { const k = r.grupo || 'OTROS'; gy[k] = (gy[k] || 0) + cents(r.importe); });
   const garr = Object.entries(gy).sort((a, b) => b[1] - a[1]); const gmx = garr[0][1];
-  const anios = [...new Set(S.semanas.map(x => x.semana.slice(0, 4)))].sort(); const anio = anios.length > 1 ? anios[0] + '–' + anios[anios.length - 1] : anios[0];
+  const anios = [...new Set(S.semanas.map(x => anioSem(x.semana)))].sort(); const anio = anios.length > 1 ? anios[0] + '–' + anios[anios.length - 1] : anios[0];
   let html = '', lastM = '';
   const mxc = mxW.c;
   S.semanas.forEach(x => {
-    const m = x.semana.slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
-    html += `<div class="item semitem" data-act="sem" data-id="${x.semana}"><div class="top"><div class="hl b">Semana del ${esc(fsem(x.semana))}</div><span class="money">${fmt(x.c / 100)}</span></div>
-      <div class="mut sm">${x.rows.length} líneas</div><div class="bar"><i style="width:${Math.max(3, Math.round(x.c / mxc * 100))}%"></i></div></div>`;
+    const m = addDias(x.semana, 3).slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
+    html += `<div class="item semitem" data-act="sem" data-id="${x.semana}"><div class="top"><div class="hl b">Semana del ${esc(semTxt(x.semana))}${x.semana === lunesDe(hoyMx()) ? ' <span class="chip ent">En curso</span>' : ''}</div><span class="money">${fmt(x.c / 100)}</span></div>
+      <div class="mut sm">${x.rows.length} líneas${x.nApp ? ` · ${x.nApp} capturada(s) en la app` : ''}${x.hojas.size ? ' · ' + esc(hojaTxt(x)) : ''}</div><div class="bar"><i style="width:${Math.max(3, Math.round(x.c / mxc * 100))}%"></i></div></div>`;
   });
-  $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal ${esc(anio)}</h2><span class="sub">Historial por semana</span></div>
+  $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal ${esc(anio)}</h2><span class="sub">Semanas de lunes a domingo</span></div>
     <div class="statgrid">
       <div class="stat out"><div class="l">Total ${esc(anio)}</div><div class="v">${fmt(tot / 100)}</div></div>
       <div class="stat"><div class="l">Promedio semanal</div><div class="v">${fmt(Math.round(tot / n) / 100)}</div></div>
-      <div class="stat"><div class="l">Semana más alta</div><div class="v">${fmt(mxW.c / 100)}</div><div class="mut sm">${esc(fsem(mxW.semana))}</div></div>
-      <div class="stat"><div class="l">Semana más baja</div><div class="v">${fmt(mnW.c / 100)}</div><div class="mut sm">${esc(fsem(mnW.semana))}</div></div></div>
+      <div class="stat"><div class="l">Semana más alta</div><div class="v">${fmt(mxW.c / 100)}</div><div class="mut sm">${esc(semTxt(mxW.semana))}</div></div>
+      <div class="stat"><div class="l">Semana más baja</div><div class="v">${fmt(mnW.c / 100)}</div><div class="mut sm">${esc(semTxt(mnW.semana))}</div></div></div>
     <div class="filters card" style="padding:10px"><input type="text" id="semQ" placeholder="Buscar en todas las semanas (concepto, folio, persona)…" value="${esc(S.semQ || '')}"></div>
     <div id="semRes" class="hidden"></div>
     <div id="semLista">
@@ -1051,29 +1143,29 @@ async function viewSem() {
 function viewSemDet(w) {
   const i = S.semanas.indexOf(w), nueva = S.semanas[i - 1], vieja = S.semanas[i + 1];
   const gs = gruposDe(w);
-  $('#view').innerHTML = `<div class="pagehead"><h2>Semana del ${esc(fsem(w.semana))}</h2></div>
+  $('#view').innerHTML = `<div class="pagehead"><h2>Semana del ${esc(semTxt(w.semana))}</h2><span class="sub">Lunes a domingo</span></div>
     <div class="semnav"><button class="btn ghost sm" data-act="sembak">← Todas las semanas</button></div>
-    <div class="saldo"><div class="lbl">Gasto de la semana</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos</div></div>
-    <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ ${esc(fsem(vieja.semana))}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">${esc(fsem(nueva.semana))} ›</button>` : ''}</div>
-    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => lineaSem(r)).join('')}</details>`).join('')}
+    <div class="saldo"><div class="lbl">Gasto de la semana</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos${w.hojas.size ? ' · ' + esc(hojaTxt(w)) : ''}</div></div>
+    <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ ${esc(fcorta(vieja.semana))}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">${esc(fcorta(nueva.semana))} ›</button>` : ''}</div>
+    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => r.origen === 'app' ? `<div data-act="detalle" data-id="${r.id}" style="cursor:pointer">${lineaSem(r)}</div>` : lineaSem(r)).join('')}</details>`).join('')}
     <div class="r" style="margin:6px 0 12px"><button class="btn ghost sm" data-act="semxls" data-id="${w.semana}">Descargar esta semana en Excel</button></div>`;
 }
 async function semExcel(semana) {
   await cargarSheetJS(); await cargarHist();
   const wb = XLSX.utils.book_new(); const num = v => Number(v);
-  const det = r => ({ Semana: r.semana, Grupo: r.grupo, Folio: r.folio || '', Concepto: r.concepto, Importe: num(r.importe), Nota: r.nota || '' });
+  const det = r => ({ 'Semana (lunes)': r.semana, Semana: 'Del ' + semTxt(r.semana), Fecha: r.fecha || '', 'Hoja Excel': r.hoja || '', Origen: r.origen === 'app' ? 'APP' : 'EXCEL', Grupo: r.grupo, Folio: r.folio || '', Concepto: r.concepto, Importe: num(r.importe), Nota: r.nota || '' });
   if (semana) {
     const w = S.semanas.find(x => x.semana === semana);
-    const rows = gruposDe(w).flatMap(g => g.rows).map(det); rows.push({ Semana: semana, Grupo: 'TOTAL', Folio: '', Concepto: '', Importe: w.c / 100, Nota: '' });
+    const rows = gruposDe(w).flatMap(g => g.rows).map(det); rows.push({ 'Semana (lunes)': semana, Semana: 'Del ' + semTxt(semana), Grupo: 'TOTAL', Importe: w.c / 100 });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Semana ' + semana);
     XLSX.writeFile(wb, `Gasto_semanal_${semana}.xlsx`);
   } else {
     const asc = [...S.semanas].reverse();
     const todos = [...new Set(S.hist.map(r => r.grupo || 'OTROS'))].sort((x, y) => ordGrupo(x) - ordGrupo(y) || x.localeCompare(y));
-    const res = asc.map(w => { const o = { Semana: w.semana, Lineas: w.rows.length }; todos.forEach(g => o[g] = 0); gruposDe(w).forEach(g => o[g.nombre] = g.c / 100); o.TOTAL = w.c / 100; return o; });
+    const res = asc.map(w => { const o = { 'Semana (lunes)': w.semana, Semana: 'Del ' + semTxt(w.semana), Lineas: w.rows.length }; todos.forEach(g => o[g] = 0); gruposDe(w).forEach(g => o[g.nombre] = g.c / 100); o.TOTAL = w.c / 100; return o; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(res), 'Resumen semanal');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(S.hist.map(det)), 'Detalle');
-    XLSX.writeFile(wb, `Gasto_semanal_${asc[0].semana.slice(0, 4)}_historial.xlsx`);
+    XLSX.writeFile(wb, `Gasto_semanal_${anioSem(asc[asc.length - 1].semana)}.xlsx`);
   }
   toast('Excel descargado.', 'ok');
 }
@@ -1126,7 +1218,7 @@ async function respaldoExcel() {
     const nFiles = {}; arch.filter(a => a.activo).forEach(a => nFiles[a.movimiento_id] = (nFiles[a.movimiento_id] || 0) + 1);
     const wb = XLSX.utils.book_new();
     const sheet = (rows, name) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ info: 'Sin datos' }]), name);
-    sheet(mov.map(m => ({ Numero: m.numero, Tipo: m.tipo, Fecha: m.fecha, Monto: Number(m.monto), Cargo: m.cargo_id ? cargoNombre(m.cargo_id) : '', Folio: m.folio_numero || '', Proveedor: m.proveedor || '', Concepto: m.concepto || '', Nota: m.nota || '',
+    sheet(mov.map(m => ({ Numero: m.numero, Tipo: m.tipo, Fecha: m.fecha, Monto: Number(m.monto), Cargo: m.cargo_id ? cargoNombre(m.cargo_id) : '', Folio: m.folio_numero || '', Proveedor: m.proveedor || '', Concepto: m.concepto || '', Nota: m.nota || '', 'Semana (lunes)': lunesDe(m.fecha), Recibo: m.recibo ? 'SI' : '', Recibe: m.recibo_recibe || '', Entrega: m.recibo_entrega || '',
       Estatus: m.estatus, Historial: m.es_historial ? 'SI' : '', 'Archivos': nFiles[m.id] || 0, 'Capturo': m.creado_por_nombre || '', 'Capturado en': m.creado_en, 'Motivo anulacion': m.motivo_anulacion || '', 'Anulado por': m.anulado_por_nombre || '' })), 'Movimientos');
     sheet(arq.map(a => ({ Fecha: a.fecha, 'Saldo sistema': Number(a.saldo_sistema), 'Efectivo contado': Number(a.efectivo_contado), Diferencia: Number(a.diferencia), Nota: a.nota || '', Por: a.creado_por_nombre || '', 'Registrado en': a.creado_en })), 'Arqueos');
     sheet(bit.map(x => ({ Fecha: x.creado_en, Usuario: x.usuario_nombre || '', Accion: x.accion, Detalle: x.detalle ? JSON.stringify(x.detalle) : '' })), 'Bitacora');
@@ -1149,6 +1241,9 @@ document.addEventListener('change', ev => {
   const el = ev.target;
   if (el.id === 'fSinT' && S.F) { S.F.sinT = el.checked; S.F.motivoT = ''; pintaTicket(); }
   if (el.id === 'fMotivoT' && S.F) S.F.motivoT = el.value;
+  if (el.id === 'fRec' && S.F) { S.F.rec = el.checked; pintaRecibo(); pintaTicket(); }
+  if (el.id === 'fRecRecibe' && S.F) S.F.recRecibe = el.value;
+  if (el.id === 'fRecEntrega' && S.F) S.F.recEntrega = el.value;
 });
 document.addEventListener('click', async ev => {
   const tabBtn = ev.target.closest('nav.tabs button'); if (tabBtn) return go(tabBtn.dataset.tab);
@@ -1179,7 +1274,10 @@ document.addEventListener('click', async ev => {
       case 'semxlsall': await semExcel(null); break;
       case 'detalle': closeModal(); await openDetail(id); break;
       case 'abrir': await abrirPath(el.dataset.path); break;
-      case 'tipo': if (S.F) { const keep = ['fFecha', 'fMonto', 'fNota'].map(k => [k, $('#' + k)?.value]); S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); keep.forEach(([k, v]) => { const e = $('#' + k); if (e && v != null) e.value = v; }); } break;
+      case 'tipo': if (S.F) { const keep = ['fFecha', 'fMonto', 'fNota'].map(k => [k, $('#' + k)?.value]); S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); keep.forEach(([k, v]) => { const e = $('#' + k); if (e && v != null) e.value = v; }); pintaSemInfo(); } break;
+      case 'fsab': { const e = $('#fFecha'); if (e && S.F) { e.value = el.dataset.f; (S.F.tkToc || (S.F.tkToc = new Set())).add('fFecha'); if (S.F.tkAuto) S.F.tkAuto.delete('fFecha'); e.classList.remove('autollenado'); pintaSemInfo(); if (S.F.tkLectura) pintaLecturaTicket(); toast('Fecha cambiada al sábado: va en la semana anterior.', 'ok'); } break; }
+      case 'imprecibo': { const m = [S._detMov, S._recMov].find(x => x && x.id === id); if (m) { imprimirRecibo(m); break; }
+        const { data } = await sb.from('caja_movimientos').select(SEL).eq('id', id).maybeSingle(); if (data) imprimirRecibo(data); break; }
       case 'pickticket': { const F = S.F, fs = await pickFuenteT('comprobante_cobro'); if (fs.length && S.F === F) { const primero = !F.files.length; F.files = F.files.concat(fs); pintaTicket(); if (primero) leerTicket(fs.find(f => /^image\//.test(f.type || ''))); } break; }
       case 'limpiarticket': S.F.files = []; S.F.tkTok = (S.F.tkTok || 0) + 1; S.F.tkEstado = null; S.F.tkLectura = null; pintaTicket(); pintaLecturaTicket(); break;
       case 'usarticket': if (S.F) { autoLlenarTicket(S.F, true); pintaLecturaTicket(); toast('Datos cambiados a lo que dice el ticket. Revísalos.', 'ok'); } break;
@@ -1203,7 +1301,7 @@ document.addEventListener('click', async ev => {
       }
       case 'anular2': {
         const mot = $('#anMot').value.trim().toUpperCase(); if (!mot) return toast('Escribe el motivo.', 'err');
-        el.disabled = true; await rpc('caja_anular', { p_id: id, p_motivo: mot }); closeModal(); toast('Movimiento anulado.', 'ok'); go(S.tab); break;
+        el.disabled = true; await rpc('caja_anular', { p_id: id, p_motivo: mot }); S.hist = null; closeModal(); toast('Movimiento anulado.', 'ok'); go(S.tab); break;
       }
       case 'arqueo': {
         const v = parseMoney($('#aqMonto').value); if (isNaN(v) || v < 0) return toast('Escribe el efectivo contado.', 'err');
