@@ -311,9 +311,10 @@ async function boot() {
   if (!p || !p.activo) { await sb.auth.signOut(); return renderLogin('Tu usuario no está activo en el sistema. Avísale a Pedro.'); }
   S.perfil = p;
   $('#app').innerHTML = '<div class="spin">Cargando…</div>';
-  const c = await sb.from('cargos').select('*').eq('activo', true).order('id');
+  // Cargos de cheques (activos) + los que solo existen en la caja (ANGEL, ERICK, MAQUINARIA, CONTRATISTAS, OTROS).
+  const c = await sb.from('cargos').select('*').or('activo.eq.true,solo_caja.eq.true').order('id');
   if (c.error) throw c.error;
-  S.cargos = (c.data || []).filter(x => x.nombre !== 'SIN CARGO');
+  S.cargos = (c.data || []).filter(x => x.nombre !== 'SIN CARGO').sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
   S.tab = 'caja';
   renderShell();
 }
