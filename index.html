@@ -201,6 +201,32 @@ nav.tabs button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white
 .esh::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff}
 .esres{background:#e4e8ee;border-radius:10px;padding:8px;text-align:center;max-height:58vh;overflow:auto}
 .esres img{max-width:100%;max-height:54vh;box-shadow:0 1px 6px rgba(0,0,0,.25);background:#fff}
+/* ---- Contratistas / listas de raya ---- */
+.persitem{align-items:center}
+.av{width:38px;height:38px;border-radius:50%;background:var(--infobg);color:var(--info);display:grid;place-items:center;font-weight:800;font-size:13px;flex:none;letter-spacing:.3px}
+.av.big{width:52px;height:52px;font-size:17px;background:var(--navy);color:#fff;box-shadow:inset 0 -3px 0 var(--gold)}
+.persitem .bar{height:5px;background:#eceff3;border-radius:4px;margin-top:7px;overflow:hidden}
+.persitem .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#e6c371)}
+.chip.ok{background:var(--okbg);color:var(--ok)} .chip.bad{background:var(--badbg);color:var(--bad)} .chip.info{background:var(--infobg);color:var(--info)}
+.item.st-ok{border-left-color:var(--ok)} .item.st-dif{border-left-color:var(--bad)} .item.st-sinlista{border-left-color:#e0a23a} .item.st-singasto{border-left-color:#2f6fb8}
+.rseg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.tagl{display:flex;gap:6px;flex-wrap:wrap}
+.cuadre{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cuadre .l{font-size:11.5px;color:var(--mut);text-transform:uppercase;font-weight:700;letter-spacing:.4px}
+.cuadre .v{font-weight:800;font-variant-numeric:tabular-nums;font-size:18px;margin:2px 0}
+@media(max-width:520px){.cuadre{grid-template-columns:1fr 1fr}.cuadre .d{grid-column:span 2}}
+table.raya td.m{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+table.raya tr.tot td{font-weight:800;border-top:2px solid #cfd6e0;border-bottom:0}
+table.raya tbody tr[data-act]{cursor:pointer} table.raya tbody tr[data-act]:hover{background:#f7f9fc}
+table.raya .chip{white-space:normal}
+.rfrow{display:grid;grid-template-columns:24px minmax(0,1fr) 190px 130px 40px;gap:6px;align-items:start;margin-bottom:8px}
+.rfrow .n{padding-top:11px;color:var(--mut);font-size:12.5px;text-align:right}
+.rfrow .x{background:#eef1f5;border:0;border-radius:10px;height:44px;cursor:pointer;font-size:20px;color:var(--mut)}
+.rfrow .hint{font-size:11.5px;margin:2px 2px 0}
+.rfrow input{padding:10px}
+@media(max-width:640px){.rfrow{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 40px;border-bottom:1px dashed var(--line);padding-bottom:8px}.rfrow .n{grid-row:1}.rfrow .nm{grid-column:2/4;grid-row:1}.rfrow .x{grid-column:4;grid-row:1}.rfrow .dt{grid-column:2;grid-row:2}.rfrow .im{grid-column:3/5;grid-row:2}}
+.sumbar>div{flex:1 1 120px;min-width:0}
+.sl.rayalink{cursor:pointer;background:#f7f9fc}.sl.rayalink:hover{background:#eef3fa}.sl.rayalink .m{color:var(--mut)}
 input.autollenado{background:rgba(224,180,74,.16)!important;border-color:#e0b44a!important}
 </style>
 </head>
@@ -275,6 +301,8 @@ window.atras = () => {
   const ov = document.querySelector('body > .overlay'); if (ov) { const no = ov.querySelector('#fzNo, #esOrig, #esOrig2'); if (no) no.click(); return true; }
   if ($('#modal').innerHTML) { closeModal(); return true; }
   if (S.tab === 'sem' && S.semSel) { S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); return true; }
+  if (S.tab === 'raya' && S.rayaForm) { S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); return true; }
+  if (S.tab === 'raya' && (S.rayaSel || S.rayaSem)) { rayaAtras(); return true; }
   if (S.tab !== 'caja') { go('caja'); return true; }
   return false;
 };
@@ -285,6 +313,7 @@ const ICON = {
   arq: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg>',
   bit: '<svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg>',
   sem: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M8 14h3M13 14h3M8 17h3"/></svg>',
+  raya: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.3.2 4.1 1.8 4.6 4.8"/></svg>',
   empty: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6"/></svg>'
 };
 
@@ -345,7 +374,7 @@ async function boot() {
 
 /* ===================== SHELL ===================== */
 function renderShell() {
-  const tabs = [['caja', 'Caja'], ['nuevo', 'Nuevo'], ['sem', 'Semanas']];   // Movimientos y Arqueo ocultos; la Bitácora se abre desde Mi cuenta
+  const tabs = [['caja', 'Caja'], ['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['raya', 'Contratistas']];   // Movimientos y Arqueo ocultos; la Bitácora se abre desde Mi cuenta
   $('#app').innerHTML = `
   <header class="top">
     <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
@@ -360,7 +389,8 @@ function go(tab, opts) {
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   if (tab !== 'nuevo') S.F = null;
   if (tab === 'sem' && !(opts && opts.keep)) { S.semSel = null; S.hist = null; }
-  ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit }[tab])(opts);
+  if (tab === 'raya' && !(opts && opts.keep)) { S.raya = null; S.hist = null; S.rayaSel = S.rayaSem = S.rayaForm = null; S.rayaNav = []; }
+  ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit, raya: viewRaya }[tab])(opts);
   window.scrollTo(0, 0); avisaNav();
 }
 
@@ -1177,8 +1207,9 @@ function viewSemDet(w) {
     <div class="semnav"><button class="btn ghost sm" data-act="sembak">← Todas las semanas</button></div>
     <div class="saldo"><div class="lbl">Gasto de la semana ${semNum(w.semana)}</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos${w.hojas.size ? ' · ' + esc(hojaTxt(w)) : ''}</div></div>
     <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ Sem ${semNum(vieja.semana)}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">Sem ${semNum(nueva.semana)} ›</button>` : ''}</div>
-    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => r.origen === 'app' ? `<div data-act="detalle" data-id="${r.id}" style="cursor:pointer">${lineaSem(r)}</div>` : lineaSem(r)).join('')}</details>`).join('')}
+    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => r.origen === 'app' ? `<div data-act="detalle" data-id="${r.id}" style="cursor:pointer">${lineaSem(r)}</div>` : lineaSem(r)).join('')}${g.nombre === 'CONTRATISTAS' ? '<div id="rayaLink"></div>' : ''}</details>`).join('')}
     <div class="r" style="margin:6px 0 12px"><button class="btn ghost sm" data-act="semxls" data-id="${w.semana}">Descargar esta semana en Excel</button></div>`;
+  if (gs.some(g => g.nombre === 'CONTRATISTAS')) pintaRayaLink(w.semana);
 }
 async function semExcel(semana) {
   await cargarSheetJS(); await cargarHist();
@@ -1198,6 +1229,354 @@ async function semExcel(semana) {
     XLSX.writeFile(wb, `Gasto_semanal_${anioSem(asc[asc.length - 1].semana)}.xlsx`);
   }
   toast('Excel descargado.', 'ok');
+}
+
+/* ===================== VISTA: CONTRATISTAS (LISTAS DE RAYA) ===================== */
+// Cada lista de raya se guarda con la fecha del VIERNES en que se paga; se compara contra el grupo CONTRATISTAS de su semana (lunes a domingo).
+const puedeRaya = () => ['administrador', 'capturista'].includes(rol());
+const viernesDe = d => addDias(lunesDe(d), 4);
+const fVie = v => `viernes ${fdia(v)}`;
+const claveNom = s => String(s || '').toUpperCase().replace(/Ñ/g, '#').normalize('NFD').replace(/\p{M}/gu, '').replace(/#/g, 'Ñ').replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+const esPrestamo = r => /PRESTAMO/.test(claveNom(r.detalle) + ' ' + claveNom(r.nombre_lista));
+const TIPO_TXT = { persona: 'Persona', empresa: 'Empresa', otro: 'Otro' };
+async function cargarRaya(force) {
+  if (S.raya && !force) return S.raya;
+  const trae = async mk => { let all = [], from = 0; for (;;) { const { data, error } = await mk().range(from, from + 999); if (error) throw error; all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000; } return all; };
+  const [t, r] = await Promise.all([
+    trae(() => sb.from('caja_trabajadores').select('id,nombre,clave,alias,tipo,activo,nota').is('unido_a', null).order('id', { ascending: true })),
+    trae(() => sb.from('caja_raya').select('id,semana,orden,trabajador_id,nombre_lista,detalle,importe,nota,origen,creado_por_nombre,creado_en').eq('vigente', true).order('semana', { ascending: true }).order('orden', { ascending: true }).order('id', { ascending: true }))]);
+  const T = {}; t.forEach(x => T[x.id] = { ...x, rows: [], c: 0, sem: new Set() });
+  const W = {};
+  r.forEach(x => {
+    const p = T[x.trabajador_id]; if (p) { p.rows.push(x); p.c += cents(x.importe); p.sem.add(x.semana); }
+    const w = W[x.semana] || (W[x.semana] = { viernes: x.semana, rows: [], c: 0 }); w.rows.push(x); w.c += cents(x.importe);
+  });
+  const porClave = {}; t.forEach(x => { porClave[claveNom(x.nombre)] = T[x.id]; (x.alias || []).forEach(a => { const k = claveNom(a); if (!porClave[k]) porClave[k] = T[x.id]; }); });
+  S.raya = { T, trab: Object.values(T), rows: r, W, porClave };
+  return S.raya;
+}
+// Total del grupo CONTRATISTAS por semana (llave: viernes)
+function contrPorVie() {
+  const m = {}; (S.hist || []).forEach(r => { if ((r.grupo || '') === 'CONTRATISTAS') { const v = addDias(r.semana, 4); m[v] = (m[v] || 0) + cents(r.importe); } });
+  return m;
+}
+function cuadreDe(v, contr) {
+  const w = S.raya.W[v], lista = w ? w.c : null, gasto = contr[v] ?? null;
+  if (lista == null) return { lista, gasto, st: 'sinlista', chip: '<span class="chip warn">Falta lista de raya</span>' };
+  if (gasto == null) return { lista, gasto, st: 'singasto', chip: '<span class="chip info">Sin CONTRATISTAS en el gasto semanal</span>' };
+  const d = lista - gasto;
+  if (!d) return { lista, gasto, d, st: 'ok', chip: '<span class="chip ok">✓ Cuadra</span>' };
+  return { lista, gasto, d, st: 'dif', chip: `<span class="chip bad">Diferencia ${fmt(d / 100)}</span>` };
+}
+function rayaIr(sel, sem) { (S.rayaNav || (S.rayaNav = [])).push({ sel: S.rayaSel || null, sem: S.rayaSem || null }); S.rayaSel = sel || null; S.rayaSem = sem || null; viewRaya(); window.scrollTo(0, 0); avisaNav(); }
+function rayaAtras() { const p = (S.rayaNav || []).pop() || {}; S.rayaSel = p.sel || null; S.rayaSem = p.sem || null; viewRaya(); window.scrollTo(0, 0); avisaNav(); }
+const backRaya = txt => `<div class="semnav"><button class="btn ghost sm" data-act="rback">← ${esc(txt || 'Regresar')}</button></div>`;
+
+async function viewRaya() {
+  if (S.rayaForm) return viewRayaForm();
+  $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
+  try { await Promise.all([cargarRaya(), cargarHist()]); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
+  if (S.tab !== 'raya') return;
+  if (S.rayaSel) { const p = S.raya.T[S.rayaSel]; if (p) return viewRayaPersona(p); S.rayaSel = null; }
+  if (S.rayaSem) return viewRayaSemana(S.rayaSem);
+  const R = S.raya, contr = contrPorVie(), modo = S.rayaModo || 'personas';
+  const conPagos = R.trab.filter(p => p.rows.length);
+  const tot = R.rows.reduce((a, r) => a + cents(r.importe), 0), nSem = Object.keys(R.W).length;
+  const desde = Object.keys(R.W).sort()[0];
+  const todasV = [...new Set([...Object.keys(R.W), ...Object.keys(contr).filter(v => !desde || v >= desde)])].sort().reverse();
+  const cu = todasV.map(v => [v, cuadreDe(v, contr)]);
+  const nFalta = cu.filter(x => x[1].st === 'sinlista').length, nDif = cu.filter(x => x[1].st === 'dif').length;
+  const pres = R.rows.filter(esPrestamo).reduce((a, r) => a + cents(r.importe), 0);
+  $('#view').innerHTML = `<div class="pagehead"><h2>Contratistas</h2><span class="sub">Listas de raya · se pagan en viernes</span></div>
+    <div class="statgrid">
+      <div class="stat"><div class="l">Pagado en listas</div><div class="v">${fmt(tot / 100)}</div><div class="mut sm">desde el ${desde ? esc(fcorta(desde)) + ' ' + desde.slice(0, 4) : '—'}</div></div>
+      <div class="stat"><div class="l">Personas</div><div class="v">${conPagos.length}</div><div class="mut sm">${R.trab.length} en el catálogo</div></div>
+      <div class="stat"><div class="l">Semanas con lista</div><div class="v">${nSem} <span class="mut" style="font-size:14px">de ${todasV.length}</span></div></div>
+      <div class="stat"><div class="l">Promedio por semana</div><div class="v">${fmt(nSem ? Math.round(tot / nSem) / 100 : 0)}</div>${pres ? `<div class="mut sm">Préstamos: ${fmt(pres / 100)}</div>` : ''}</div></div>
+    ${nFalta || nDif ? `<div class="card summary" data-act="rmodo" data-id="semanas" style="cursor:pointer"><div class="ico">${ICON.raya}</div><div class="grow"><div class="b">${[nFalta ? `${nFalta} semana(s) sin lista de raya` : '', nDif ? `${nDif} con diferencia contra el gasto semanal` : ''].filter(Boolean).join(' · ')}</div><div class="mut sm">Toca para ver las semanas.</div></div></div>` : ''}
+    <div class="row" style="margin-bottom:10px">${puedeRaya() ? '<button class="btn gold" data-act="rnueva">+ Capturar lista de raya</button>' : ''}<button class="btn ghost sm" data-act="rxls">Descargar Excel</button>${esAdmin() ? '<button class="btn ghost sm" data-act="rdups">Nombres parecidos</button>' : ''}</div>
+    <div class="seg rseg"><button class="${modo === 'personas' ? 'on' : ''}" data-act="rmodo" data-id="personas">Personas</button><button class="${modo === 'semanas' ? 'on' : ''}" data-act="rmodo" data-id="semanas">Semanas</button></div>
+    <div id="rayaBody"></div>`;
+  if (modo === 'semanas') {
+    let html = '', lastM = '';
+    const mx = Math.max(1, ...cu.map(([, c]) => Math.max(c.lista || 0, c.gasto || 0)));
+    cu.forEach(([v, c]) => {
+      const m = v.slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
+      const w = R.W[v], monto = c.lista ?? c.gasto;
+      html += `<div class="item semitem st-${c.st}" data-act="rsem" data-id="${v}"><div class="top"><div class="hl b">Viernes ${esc(fcorta(v))} <span class="mut" style="font-weight:600">· ${esc(semEtq(lunesDe(v)))}</span></div><span class="money">${fmt(monto / 100)}</span></div>
+        <div class="mut sm">${w ? `${w.rows.length} renglones · ${new Set(w.rows.map(r => r.trabajador_id)).size} personas · ` : ''}${c.chip}</div><div class="bar"><i style="width:${Math.max(3, Math.round(monto / mx * 100))}%"></i></div></div>`;
+    });
+    $('#rayaBody').innerHTML = html || `<div class="card empty">${ICON.empty}<div>Todavía no hay listas de raya.</div></div>`;
+    return;
+  }
+  $('#rayaBody').innerHTML = `<div class="filters card" style="padding:10px"><input type="text" id="rayQ" placeholder="Buscar persona, obra o detalle…" value="${esc(S.rayaQ || '')}" autocomplete="off">
+      <select id="rayOrd"><option value="monto">Mayor pago</option><option value="reciente">Pago más reciente</option><option value="az">Nombre A–Z</option></select></div><div id="rayLista"></div>`;
+  $('#rayOrd').value = S.rayaOrd || 'monto';
+  const pinta = () => {
+    const q = claveNom($('#rayQ').value); S.rayaQ = $('#rayQ').value; S.rayaOrd = $('#rayOrd').value;
+    let ps = R.trab.filter(p => p.rows.length || !q);
+    if (q.length >= 2) ps = R.trab.filter(p => claveNom([p.nombre, ...(p.alias || []), p.nota || ''].join(' ')).includes(q) || p.rows.some(r => claveNom(`${r.nombre_lista} ${r.detalle || ''}`).includes(q)));
+    const ult = p => p.rows.length ? p.rows[p.rows.length - 1].semana : '';
+    ps.sort(S.rayaOrd === 'az' ? (a, b) => a.nombre.localeCompare(b.nombre) : S.rayaOrd === 'reciente' ? (a, b) => ult(b).localeCompare(ult(a)) || b.c - a.c : (a, b) => b.c - a.c);
+    const mx = Math.max(1, ...ps.map(p => p.c)), sum = ps.reduce((a, p) => a + p.c, 0);
+    $('#rayLista').innerHTML = (q.length >= 2 ? `<div class="mut sm" style="margin:0 4px 8px">${ps.length} persona(s) · ${fmt(sum / 100)}</div>` : '') + (ps.map(p => `<div class="item persitem" data-act="rper" data-id="${p.id}">
+        <div class="av">${esc(iniciales(p.nombre))}</div>
+        <div class="main"><div class="hl">${esc(p.nombre)}${p.tipo !== 'persona' ? ` <span class="chip historial">${esc(TIPO_TXT[p.tipo] || p.tipo)}</span>` : ''}</div>
+          <div class="mut sm">${p.sem.size ? `${p.sem.size} semana(s) · último pago ${esc(fcorta(ult(p)))}` : 'Sin pagos'}</div>
+          <div class="bar"><i style="width:${Math.max(2, Math.round(p.c / mx * 100))}%"></i></div></div>
+        <div class="side"><span class="money">${fmt(p.c / 100)}</span>${tot && p.c ? `<span class="mut sm">${(p.c / tot * 100).toFixed(1)}%</span>` : ''}</div></div>`).join('') || `<div class="card empty">${ICON.empty}<div>Sin resultados.</div></div>`);
+  };
+  let t; $('#rayQ').oninput = () => { clearTimeout(t); t = setTimeout(pinta, 200); }; $('#rayOrd').onchange = pinta;
+  pinta();
+}
+
+function viewRayaPersona(p) {
+  const rows = [...p.rows].sort((a, b) => b.semana.localeCompare(a.semana) || a.orden - b.orden);
+  const nSem = p.sem.size, prom = nSem ? Math.round(p.c / nSem) : 0;
+  const mxRow = rows.reduce((a, r) => !a || cents(r.importe) > cents(a.importe) ? r : a, null);
+  const pres = rows.filter(esPrestamo).reduce((a, r) => a + cents(r.importe), 0);
+  const prim = rows.length ? rows[rows.length - 1].semana : '', ult = rows.length ? rows[0].semana : '';
+  const porMes = {}; rows.forEach(r => { const m = r.semana.slice(0, 7); porMes[m] = (porMes[m] || 0) + cents(r.importe); });
+  const meses = Object.keys(porMes).sort(), mxM = Math.max(1, ...Object.values(porMes));
+  const obras = {}; rows.forEach(r => { if (r.detalle && !esPrestamo(r)) obras[r.detalle] = (obras[r.detalle] || 0) + 1; });
+  const comoLista = [...new Set(rows.map(r => r.nombre_lista).filter(n => claveNom(n) !== p.clave))];
+  let html = '', lastV = '';
+  rows.forEach(r => {
+    const nuevo = r.semana !== lastV; lastV = r.semana;
+    html += `<div class="sl" data-act="rsem" data-id="${r.semana}" style="cursor:pointer"><div class="c">${nuevo ? `<b>Viernes ${esc(fcorta(r.semana))} ${r.semana.slice(0, 4)}</b>` : '<span class="mut">mismo viernes</span>'}<small>${esc(semEtq(lunesDe(r.semana)))}${claveNom(r.nombre_lista) !== p.clave ? ' · en la lista: ' + esc(r.nombre_lista) : ''}${r.detalle ? ' · ' + esc(r.detalle) : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div><div class="m">${esPrestamo(r) ? '<span class="chip warn" style="margin-right:6px">Préstamo</span>' : ''}${fmt(r.importe)}</div></div>`;
+  });
+  $('#view').innerHTML = `${backRaya('Regresar')}
+    <div class="pagehead"><div class="av big">${esc(iniciales(p.nombre))}</div><div><h2>${esc(p.nombre)}</h2><span class="sub">${esc(TIPO_TXT[p.tipo] || p.tipo)}${p.activo ? '' : ' · inactivo'}${p.nota ? ' · ' + esc(p.nota) : ''}</span></div></div>
+    <div class="saldo"><div class="lbl">Total pagado en listas de raya</div><div class="num">${fmt(p.c / 100)}</div><div class="sub2">${rows.length} pago(s) en ${nSem} semana(s)${prim ? ` · del ${esc(fcorta(prim))} ${prim.slice(0, 4)} al ${esc(fcorta(ult))} ${ult.slice(0, 4)}` : ''}</div></div>
+    <div class="statgrid">
+      <div class="stat"><div class="l">Promedio por semana</div><div class="v">${fmt(prom / 100)}</div></div>
+      <div class="stat"><div class="l">Pago más alto</div><div class="v">${fmt(mxRow ? mxRow.importe : 0)}</div><div class="mut sm">${mxRow ? 'viernes ' + esc(fcorta(mxRow.semana)) : ''}</div></div>
+      ${pres ? `<div class="stat"><div class="l">Préstamos</div><div class="v">${fmt(pres / 100)}</div></div>` : ''}
+      <div class="stat"><div class="l">Último pago</div><div class="v" style="font-size:16px">${ult ? 'Viernes ' + esc(fcorta(ult)) : '—'}</div></div></div>
+    ${(p.alias || []).length || comoLista.length || Object.keys(obras).length ? `<div class="card">
+      ${(p.alias || []).length || comoLista.length ? `<div class="mut sm b" style="margin-bottom:6px">TAMBIÉN APARECE EN LAS LISTAS COMO</div><div class="tagl">${[...new Set([...(p.alias || []), ...comoLista])].map(a => `<span class="chip historial">${esc(a)}</span>`).join('')}</div>` : ''}
+      ${Object.keys(obras).length ? `<div class="mut sm b" style="margin:10px 0 6px">OBRAS / DETALLES</div><div class="tagl">${Object.entries(obras).sort((a, b) => b[1] - a[1]).map(([o, n]) => `<span class="chip info">${esc(o)} · ${n}</span>`).join('')}</div>` : ''}</div>` : ''}
+    ${meses.length > 1 ? `<div class="card bars"><div class="b" style="margin-bottom:4px">Pagos por mes</div>${meses.map(m => `<div class="br"><div class="n">${esc(mesTxt(m))}</div><div class="bar"><i style="width:${Math.max(2, Math.round(porMes[m] / mxM * 100))}%"></i></div><div class="m">${fmt(porMes[m] / 100)}</div></div>`).join('')}</div>` : ''}
+    <h3>Pagos (${rows.length})</h3>
+    <div class="card" style="padding:0;overflow:hidden">${html || '<div class="empty">Sin pagos registrados.</div>'}</div>
+    <div class="row" style="margin:6px 0 12px"><button class="btn ghost sm" data-act="rxlsper" data-id="${p.id}">Descargar sus pagos en Excel</button>${esAdmin() ? `<button class="btn ghost sm" data-act="rper_edit" data-id="${p.id}">Editar nombre</button><button class="btn ghost sm" data-act="rper_unir" data-id="${p.id}">Es la misma persona que…</button>` : ''}</div>`;
+}
+
+function viewRayaSemana(v) {
+  const contr = contrPorVie(), c = cuadreDe(v, contr), w = S.raya.W[v];
+  const todasV = [...new Set([...Object.keys(S.raya.W), ...Object.keys(contr)])].sort();
+  const i = todasV.indexOf(v), ant = todasV[i - 1], sig = todasV[i + 1];
+  const lunes = lunesDe(v);
+  const rows = w ? [...w.rows].sort((a, b) => a.orden - b.orden) : [];
+  const nPers = new Set(rows.map(r => r.trabajador_id)).size;
+  const creado = rows.length ? [...new Set(rows.map(r => r.origen === 'pdf' ? 'carga histórica (PDF de listas de raya)' : r.creado_por_nombre).filter(Boolean))].join(', ') : '';
+  $('#view').innerHTML = `${backRaya('Regresar')}
+    <div class="pagehead"><div><h2>Raya del ${esc(fVie(v))}</h2><span class="sub">${esc(semEtq(lunes))} · del ${esc(semTxt(lunes))}</span></div></div>
+    <div class="semnav">${ant ? `<button class="btn ghost sm" data-act="rsemnav" data-id="${ant}">‹ Vie ${esc(fcorta(ant))}</button>` : ''}${sig ? `<button class="btn ghost sm" data-act="rsemnav" data-id="${sig}">Vie ${esc(fcorta(sig))} ›</button>` : ''}</div>
+    <div class="card"><div class="cuadre">
+      <div><div class="l">Lista de raya</div><div class="v">${c.lista != null ? fmt(c.lista / 100) : '—'}</div><div class="mut sm">${rows.length ? `${nPers} personas` : 'sin capturar'}</div></div>
+      <div><div class="l">Contratistas (gasto semanal)</div><div class="v">${c.gasto != null ? fmt(c.gasto / 100) : '—'}</div><div class="mut sm">${c.gasto != null ? `<a href="#" data-act="rversem" data-id="${lunes}">ver la semana</a>` : 'no registrado'}</div></div>
+      <div class="d"><div class="l">Diferencia</div><div class="v ${c.st === 'dif' ? 'neg' : c.st === 'ok' ? 'pos' : ''}">${c.st === 'ok' ? '$0.00' : c.st === 'dif' ? fmt(c.d / 100) : '—'}</div><div class="sm">${c.chip}</div></div></div>
+      ${c.st === 'dif' ? `<div class="warnbox" style="margin-bottom:0">La lista suma ${fmt(Math.abs(c.d) / 100)} ${c.d > 0 ? 'más' : 'menos'} que lo que se registró en CONTRATISTAS esa semana. Revisa la hoja física o corrige la lista.</div>` : ''}
+      ${c.st === 'sinlista' ? `<div class="warnbox" style="margin-bottom:0">Esta semana tiene ${fmt(c.gasto / 100)} de CONTRATISTAS en el gasto semanal, pero todavía no se captura su lista de raya.</div>` : ''}</div>
+    ${rows.length ? `<div class="card" style="padding:4px 6px"><table class="raya"><thead><tr><th style="width:28px">#</th><th>Nombre</th><th>Obra / detalle</th><th class="r">Importe</th></tr></thead><tbody>
+      ${rows.map((r, k) => { const p = S.raya.T[r.trabajador_id]; return `<tr data-act="rper" data-id="${r.trabajador_id}"><td class="mut">${k + 1}</td><td><b>${esc(p ? p.nombre : r.nombre_lista)}</b>${p && claveNom(r.nombre_lista) !== p.clave ? `<div class="mut sm">en la lista: ${esc(r.nombre_lista)}</div>` : ''}${r.nota ? `<div class="mut sm">${esc(r.nota)}</div>` : ''}</td><td>${r.detalle ? `<span class="chip ${esPrestamo(r) ? 'warn' : 'info'}">${esc(r.detalle)}</span>` : ''}</td><td class="m">${fmt(r.importe)}</td></tr>`; }).join('')}
+      <tr class="tot"><td></td><td colspan="2">TOTAL · ${rows.length} renglones</td><td class="m">${fmt(w.c / 100)}</td></tr></tbody></table></div>
+      <div class="mut sm" style="margin:0 4px 10px">Capturó: ${esc(creado)}</div>`
+    : `<div class="card empty">${ICON.empty}<div>No hay lista de raya para este viernes.</div></div>`}
+    <div class="row" style="margin:6px 0 12px">${puedeRaya() ? `<button class="btn ${rows.length ? 'ghost' : 'gold'}" data-act="reditar" data-id="${v}">${rows.length ? 'Editar lista' : '+ Capturar lista de este viernes'}</button>` : ''}${rows.length ? `<button class="btn ghost sm" data-act="rxlssem" data-id="${v}">Descargar en Excel</button>` : ''}</div>`;
+}
+
+/* ---- Captura / edición de una lista de raya ---- */
+function abrirRayaForm(v) {
+  v = viernesDe(v || hoyMx());
+  const w = S.raya && S.raya.W[v];
+  const filas = w ? [...w.rows].sort((a, b) => a.orden - b.orden).map(r => ({ nombre: r.nombre_lista, detalle: r.detalle || '', importe: String(Number(r.importe)), nota: r.nota || '', origen: r.origen })) : [];
+  while (filas.length < 3) filas.push({ nombre: '', detalle: '', importe: '', nota: '' });
+  S.rayaForm = { viernes: v, filas, existia: !!w };
+  viewRaya(); window.scrollTo(0, 0); avisaNav();
+}
+function rfHint(f) {
+  const n = claveNom(String(f.nombre || '').replace(/\([^)]*\)/g, ' '));
+  if (!n) return '';
+  const p = S.raya.porClave[n];
+  if (!p) return '<span style="color:var(--warn)">Nombre nuevo: se agregará al catálogo</span>';
+  return p.clave === n ? '<span class="pos">✓ En el catálogo</span>' : `<span class="pos">✓ Se guarda como ${esc(p.nombre)}</span>`;
+}
+function rfFilaHtml(f, i) {
+  return `<div class="rfrow" data-i="${i}"><div class="n">${i + 1}</div>
+    <div class="nm"><input type="text" list="rfNombres" class="rfN" data-i="${i}" value="${esc(f.nombre)}" placeholder="Nombre" autocomplete="off"><div class="hint" id="rfH${i}">${rfHint(f)}</div></div>
+    <div class="dt"><input type="text" class="rfD" data-i="${i}" value="${esc(f.detalle)}" placeholder="Obra / detalle" autocomplete="off"></div>
+    <div class="im"><input type="text" inputmode="decimal" class="rfI" data-i="${i}" value="${esc(f.importe)}" placeholder="$ Importe" autocomplete="off" data-nocaps></div>
+    <button class="x" data-act="rfquitar" data-id="${i}" title="Quitar renglón" aria-label="Quitar renglón">×</button></div>`;
+}
+function rfTotal() { return S.rayaForm.filas.reduce((a, f) => { const v = parseMoney(f.importe); return a + (isNaN(v) ? 0 : cents(v)); }, 0); }
+function rfPintaSuma() {
+  const F = S.rayaForm, box = $('#rfSuma'); if (!box) return;
+  const t = rfTotal(), g = contrPorVie()[F.viernes], n = F.filas.filter(f => f.nombre.trim() || f.importe.trim()).length;
+  const d = g == null ? null : t - g;
+  box.className = 'sumbar ' + (d === 0 ? 'okk' : d == null ? '' : 'noo');
+  box.innerHTML = `<div><div class="mut sm">Total de la lista (${n})</div><div class="money big">${fmt(t / 100)}</div></div>
+    <div><div class="mut sm">Gasto semanal (CONTRATISTAS)</div><div class="money">${g == null ? 'No registrado' : fmt(g / 100)}</div></div>
+    <div><div class="mut sm">Diferencia</div><div class="money ${d ? 'neg' : 'pos'}">${d == null ? '—' : d === 0 ? '✓ Cuadra' : fmt(d / 100)}</div></div>`;
+}
+function rfPintaFilas() { $('#rfFilas').innerHTML = S.rayaForm.filas.map(rfFilaHtml).join(''); rfPintaSuma(); }
+function rfPintaSemInfo() {
+  const F = S.rayaForm, w = S.raya.W[F.viernes], lunes = lunesDe(F.viernes);
+  $('#rfSemInfo').innerHTML = `${esc(semEtq(lunes))} · del ${esc(semTxt(lunes))}${w && !F.existia ? `<div class="warnbox">Ese viernes ya tiene una lista de ${w.rows.length} renglones (${fmt(w.c / 100)}). Si guardas, <b>se reemplaza</b>. <a href="#" data-act="rfcargar">Cargar la lista existente</a></div>` : ''}`;
+}
+function viewRayaForm() {
+  const F = S.rayaForm;
+  const ops = S.raya.trab.filter(p => p.activo).map(p => `<option value="${esc(p.nombre)}">`).join('');
+  $('#view').innerHTML = `<div class="semnav"><button class="btn ghost sm" data-act="rfcancelar">← Cancelar</button></div>
+    <div class="pagehead"><h2>${F.existia ? 'Editar lista de raya' : 'Capturar lista de raya'}</h2></div>
+    <div class="card"><label class="f" style="margin-top:0">Viernes de pago</label><input type="date" id="rfFecha" value="${F.viernes}">
+      <div class="mut sm" id="rfSemInfo" style="margin-top:6px"></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><div class="b">Renglones</div><button class="btn ghost sm" data-act="rfpegar">Pegar desde Excel</button></div>
+      <div id="rfPegar" class="hidden" style="margin-bottom:10px"><div class="mut sm" style="margin-bottom:4px">Copia de tu Excel las columnas de nombre e importe (una persona por renglón) y pégalas aquí. Lo que vaya entre paréntesis se toma como obra.</div>
+        <textarea id="rfPegarTxt" rows="6" placeholder="JOSE OROZCO &#9; $ 34,500.00&#10;HUGO HERNANDEZ &#9; $ 39,372.00"></textarea>
+        <div class="row" style="margin-top:6px"><button class="btn sm" data-act="rfpegarok">Agregar a la lista</button><button class="btn ghost sm" data-act="rfpegar">Cerrar</button></div></div>
+      <datalist id="rfNombres">${ops}</datalist>
+      <div id="rfFilas"></div>
+      <button class="btn ghost sm" data-act="rfmas" style="margin-top:4px">+ Agregar renglón</button></div>
+    <div id="rfSuma" class="sumbar"></div>
+    <div class="row" style="margin:14px 0"><button class="btn gold grow" data-act="rfguardar">Guardar lista</button><button class="btn ghost" data-act="rfcancelar">Cancelar</button></div>`;
+  rfPintaSemInfo(); rfPintaFilas();
+  $('#rfFecha').onchange = () => {
+    const v = $('#rfFecha').value; if (!v) return;
+    F.viernes = viernesDe(v); $('#rfFecha').value = F.viernes; F.existia = false;
+    const vacia = !F.filas.some(f => f.nombre.trim() || f.importe.trim());
+    if (vacia && S.raya.W[F.viernes]) return abrirRayaForm(F.viernes);
+    rfPintaSemInfo(); rfPintaSuma();
+  };
+  $('#rfFilas').oninput = ev => {
+    const el = ev.target, i = Number(el.dataset.i); if (isNaN(i)) return; const f = F.filas[i];
+    if (el.classList.contains('rfN')) { f.nombre = el.value; const h = $('#rfH' + i); if (h) h.innerHTML = rfHint(f); }
+    if (el.classList.contains('rfD')) f.detalle = el.value;
+    if (el.classList.contains('rfI')) { f.importe = el.value; rfPintaSuma(); }
+  };
+  $('#rfFilas').addEventListener('focusout', ev => {
+    const el = ev.target, i = Number(el.dataset.i); if (isNaN(i)) return; const f = F.filas[i];
+    if (el.classList.contains('rfN')) { const m = f.nombre.match(/\(([^)]*)\)/); if (m && !f.detalle.trim()) { f.detalle = m[1].trim(); f.nombre = f.nombre.replace(/\s*\([^)]*\)\s*/g, ' ').trim(); rfPintaFilas(); } }
+    if (el.classList.contains('rfI')) { const v = parseMoney(f.importe); if (!isNaN(v) && f.importe.trim()) { el.value = f.importe = v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } }
+  });
+}
+function rfParsePegado(txt) {
+  const out = [];
+  String(txt || '').split(/\r?\n/).forEach(l => {
+    if (!l.trim() || /TOTAL/i.test(l)) return;
+    const cells = l.split('\t').map(c => c.trim()).filter(Boolean);
+    let nombre = '', importe = NaN, detalle = '';
+    if (cells.length > 1) {
+      for (let k = cells.length - 1; k >= 0; k--) { const v = parseMoney(cells[k]); if (!isNaN(v) && /\d/.test(cells[k])) { importe = v; cells.splice(k, 1); break; } }
+      const txts = cells.filter(c => isNaN(parseMoney(c)) && c !== '$'); nombre = txts[0] || ''; detalle = txts.slice(1).join(' ');
+    } else {
+      const m = l.match(/^(.*?)[\s$]*(-?[\d,]+(?:\.\d{1,2})?)\s*$/); if (m) { nombre = m[1].replace(/\$\s*$/, '').trim(); importe = parseMoney(m[2]); }
+    }
+    if (!nombre || isNaN(importe)) return;
+    const pm = nombre.match(/\(([^)]*)\)/); if (pm) { detalle = detalle || pm[1].trim(); nombre = nombre.replace(/\s*\([^)]*\)\s*/g, ' ').trim(); }
+    out.push({ nombre: nombre.toUpperCase(), detalle: detalle.toUpperCase(), importe: importe.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), nota: '' });
+  });
+  return out;
+}
+async function rfGuardar(btn) {
+  const F = S.rayaForm;
+  const filas = F.filas.filter(f => f.nombre.trim() || f.importe.trim());
+  if (!filas.length) return toast('Agrega al menos un renglón.', 'err');
+  for (let i = 0; i < filas.length; i++) {
+    const f = filas[i], v = parseMoney(f.importe);
+    if (!f.nombre.trim()) return toast(`Renglón ${F.filas.indexOf(f) + 1}: falta el nombre.`, 'err');
+    if (isNaN(v) || v <= 0) return toast(`Renglón ${F.filas.indexOf(f) + 1} (${f.nombre}): escribe un importe mayor a cero.`, 'err');
+  }
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const res = await rpc('caja_raya_guardar', { p_semana: F.viernes, p_filas: filas.map(f => ({ nombre: f.nombre.trim().toUpperCase(), detalle: (f.detalle || '').trim().toUpperCase(), importe: parseMoney(f.importe), nota: f.nota || '', origen: f.origen || 'app' })) });
+    const v = res && res.semana || F.viernes;
+    S.rayaForm = null; S.raya = null; S.rayaNav = []; S.rayaSel = null; S.rayaSem = v;
+    await cargarRaya(true);
+    const c = cuadreDe(v, contrPorVie());
+    toast(c.st === 'ok' ? 'Lista guardada. ✓ Cuadra con CONTRATISTAS.' : c.st === 'dif' ? `Lista guardada, pero hay diferencia de ${fmt(c.d / 100)} contra CONTRATISTAS.` : 'Lista guardada.', c.st === 'dif' ? 'err' : 'ok');
+    viewRaya(); window.scrollTo(0, 0); avisaNav();
+  } catch (e) { btn.disabled = false; btn.textContent = 'Guardar lista'; throw e; }
+}
+
+/* ---- Catálogo: editar / unir / nombres parecidos (solo administrador) ---- */
+function levD(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let p = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { const c = [i]; for (let j = 1; j <= n; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); p = c; } return p[n]; }
+const simil = (a, b) => 1 - levD(a, b) / Math.max(a.length, b.length, 1);
+function nombresParecidos() {
+  let no = []; try { no = JSON.parse(localStorage.getItem('jocris_raya_nodup') || '[]'); } catch (e) { }
+  const ps = S.raya.trab.filter(p => p.rows.length), out = [];
+  const freq = {}; ps.forEach(p => new Set(p.clave.split(' ')).forEach(t => freq[t] = (freq[t] || 0) + 1));
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+    const a = ps[i], b = ps[j], ta = a.clave.split(' '), tb = b.clave.split(' ');
+    const key = [a.id, b.id].sort((x, y) => x - y).join('-'); if (no.includes(key)) continue;
+    if ([...a.sem].some(s => b.sem.has(s))) continue;   // si cobran la misma semana, son personas distintas
+    let si = simil(a.clave, b.clave) >= 0.8;
+    if (!si && ta[0] === tb[0] && ta.length > 1 && tb.length > 1) {
+      const ra = ta.slice(1).join(' '), rb = tb.slice(1).join(' ');
+      si = simil(ra, rb) > 0.6 || (ta.length === 2 && tb.length === 2 && ra.slice(0, 3) === rb.slice(0, 3))
+        || ta.some((t, k) => k > 0 && t.length > 2 && tb.includes(t) && (k !== 1 || tb.indexOf(t) !== 1 || (ta.length > 2 && tb.length > 2 && /EZ$/.test(ta[ta.length - 1]) && /EZ$/.test(tb[tb.length - 1]))));   // HDZ / RDZ / MTZ
+    }
+    if (!si) si = ta.some((t, k) => t.length >= 5 && freq[t] === 2 && tb.includes(t) && (k === 0) !== (tb.indexOf(t) === 0));   // nombre y apellido invertidos
+    if (si) out.push({ a, b, key });
+  }
+  return out;
+}
+function modalParecidos() {
+  const ds = nombresParecidos();
+  const card = p => `<div class="grow"><div class="b">${esc(p.nombre)}</div><div class="mut sm">${p.sem.size} sem · ${fmt(p.c / 100)}${p.rows.length ? ' · último ' + esc(fcorta(p.rows[p.rows.length - 1].semana)) : ''}</div></div>`;
+  openModal(`<h2 style="margin-top:0">Nombres parecidos</h2><div class="mut sm" style="margin-bottom:10px">Posibles duplicados por cómo se escribieron en las listas. Si son la misma persona, únelos: todos sus pagos quedan bajo un solo nombre y el otro se guarda como "también aparece como". Solo se sugieren nombres que nunca cobraron en la misma semana.</div>
+    ${ds.map(d => { return `<div class="card" id="dup-${d.key}"><div class="row">${card(d.a)}<div class="mut">↔</div>${card(d.b)}</div>
+      <div class="row" style="margin-top:8px"><button class="btn ghost sm" data-act="runir" data-de="${d.b.id}" data-a="${d.a.id}">Dejar como ${esc(d.a.nombre)}</button><button class="btn ghost sm" data-act="runir" data-de="${d.a.id}" data-a="${d.b.id}">Dejar como ${esc(d.b.nombre)}</button><button class="btn ghost sm" data-act="rnodup" data-id="${d.key}">Son distintas</button></div></div>`; }).join('') || '<div class="card empty">No hay nombres parecidos pendientes.</div>'}`);
+}
+function modalEditarPersona(p) {
+  openModal(`<h2 style="margin-top:0">Editar</h2>
+    <label class="f">Nombre</label><input type="text" id="tpNom" value="${esc(p.nombre)}">
+    <label class="f">Tipo</label><select id="tpTipo">${Object.entries(TIPO_TXT).map(([k, l]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <label class="f">Nota (oficio, cuadrilla, teléfono…)</label><input type="text" id="tpNota" value="${esc(p.nota || '')}">
+    <label class="row" style="margin-top:12px;gap:8px"><input type="checkbox" id="tpAct" ${p.activo ? 'checked' : ''} style="width:auto"> Activo (aparece en las sugerencias al capturar)</label>
+    <div class="mut sm" style="margin-top:8px">Si cambias el nombre, el anterior se guarda como "también aparece como" para que se reconozca en listas futuras.</div>
+    <div class="row" style="margin-top:14px"><button class="btn" data-act="rper_editok" data-id="${p.id}">Guardar</button><button class="btn ghost" data-act="close">Cancelar</button></div>`);
+}
+function modalUnirPersona(p) {
+  const otros = S.raya.trab.filter(x => x.id !== p.id).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  openModal(`<h2 style="margin-top:0">Unir nombres</h2><div class="mut sm">Si <b>${esc(p.nombre)}</b> es la misma persona que otro nombre del catálogo, elige con cuál. Sus ${p.rows.length} pago(s) pasan a ese nombre y "${esc(p.nombre)}" queda como "también aparece como".</div>
+    <label class="f">Es la misma persona que</label><input type="text" id="tuQ" placeholder="Buscar…" autocomplete="off">
+    <select id="tuSel" size="8" style="margin-top:6px">${otros.map(x => `<option value="${x.id}">${esc(x.nombre)} · ${x.sem.size} sem · ${fmt(x.c / 100)}</option>`).join('')}</select>
+    <div class="row" style="margin-top:14px"><button class="btn" data-act="runir" data-de="${p.id}" data-a="" id="tuOk">Unir</button><button class="btn ghost" data-act="close">Cancelar</button></div>`);
+  $('#tuQ').oninput = () => { const q = claveNom($('#tuQ').value); [...$('#tuSel').options].forEach(o => o.hidden = q && !claveNom(o.textContent).includes(q)); };
+}
+
+/* ---- Excel ---- */
+async function rayaExcel(modo, id) {
+  await cargarSheetJS(); await Promise.all([cargarRaya(), cargarHist()]);
+  const R = S.raya, contr = contrPorVie(), wb = XLSX.utils.book_new();
+  const det = r => { const p = R.T[r.trabajador_id]; return { 'Viernes de pago': r.semana, 'No. semana': semNum(lunesDe(r.semana)), Semana: 'Del ' + semTxt(lunesDe(r.semana)), '#': r.orden, Persona: p ? p.nombre : '', 'Nombre en la lista': r.nombre_lista, 'Obra / detalle': r.detalle || '', Importe: Number(r.importe), Nota: r.nota || '', Origen: r.origen === 'pdf' ? 'PDF HISTORICO' : 'APP' }; };
+  const hoja = (rows, name) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ info: 'Sin datos' }]), name);
+  if (modo === 'per') {
+    const p = R.T[id]; hoja(p.rows.map(det), 'Pagos');
+    XLSX.writeFile(wb, `Raya_${p.nombre.replace(/[^A-Z0-9Ñ]+/gi, '_')}.xlsx`);
+  } else if (modo === 'sem') {
+    const w = R.W[id], rows = [...w.rows].sort((a, b) => a.orden - b.orden).map(det);
+    rows.push({ 'Viernes de pago': id, Persona: 'TOTAL', Importe: w.c / 100 });
+    if (contr[id] != null) rows.push({ 'Viernes de pago': id, Persona: 'CONTRATISTAS (gasto semanal)', Importe: contr[id] / 100 }, { 'Viernes de pago': id, Persona: 'DIFERENCIA', Importe: (w.c - contr[id]) / 100 });
+    hoja(rows, 'Raya ' + id); XLSX.writeFile(wb, `Raya_viernes_${id}.xlsx`);
+  } else {
+    hoja([...R.rows].map(det), 'Detalle');
+    hoja(R.trab.filter(p => p.rows.length).sort((a, b) => b.c - a.c).map(p => ({ Persona: p.nombre, Tipo: TIPO_TXT[p.tipo] || p.tipo, 'También como': (p.alias || []).join(', '), Semanas: p.sem.size, Pagos: p.rows.length, Total: p.c / 100, 'Promedio semanal': Math.round(p.c / p.sem.size) / 100, 'Primer pago': p.rows[0].semana, 'Último pago': p.rows[p.rows.length - 1].semana })), 'Por persona');
+    const vs = [...new Set([...Object.keys(R.W), ...Object.keys(contr)])].sort();
+    hoja(vs.map(v => { const c = cuadreDe(v, contr); return { 'Viernes de pago': v, 'No. semana': semNum(lunesDe(v)), Personas: R.W[v] ? new Set(R.W[v].rows.map(r => r.trabajador_id)).size : 0, 'Total lista': c.lista != null ? c.lista / 100 : '', 'CONTRATISTAS gasto semanal': c.gasto != null ? c.gasto / 100 : '', Diferencia: c.st === 'dif' ? c.d / 100 : c.st === 'ok' ? 0 : '', Estado: { ok: 'Cuadra', dif: 'Diferencia', sinlista: 'Falta lista', singasto: 'Sin gasto semanal' }[c.st] }; }), 'Por semana');
+    XLSX.writeFile(wb, `Listas_de_raya_${today()}.xlsx`);
+  }
+  toast('Excel descargado.', 'ok');
+}
+// Enlace desde el gasto semanal (grupo CONTRATISTAS) hacia su lista de raya
+async function pintaRayaLink(lunes) {
+  const box = $('#rayaLink'); if (!box) return;
+  try { await cargarRaya(); } catch (e) { return; }
+  const b2 = $('#rayaLink'); if (!b2 || S.tab !== 'sem') return;
+  const v = addDias(lunes, 4), w = S.raya.W[v], c = cuadreDe(v, contrPorVie());
+  b2.innerHTML = `<div class="sl rayalink" data-act="rdesdesem" data-id="${v}"><div class="c"><b>${w ? `Ver lista de raya · ${new Set(w.rows.map(r => r.trabajador_id)).size} personas` : 'Lista de raya'}</b><small>Viernes ${esc(fcorta(v))} · ${c.chip}</small></div><div class="m">›</div></div>`;
 }
 
 /* ===================== VISTA: BITACORA ===================== */
@@ -1302,6 +1681,49 @@ document.addEventListener('click', async ev => {
       case 'sembak': S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); break;
       case 'semxls': await semExcel(id); break;
       case 'semxlsall': await semExcel(null); break;
+      case 'rper': rayaIr(Number(id), null); break;
+      case 'rsem': rayaIr(null, id); break;
+      case 'rsemnav': S.rayaSem = id; viewRaya(); window.scrollTo(0, 0); break;
+      case 'rback': rayaAtras(); break;
+      case 'rmodo': S.rayaModo = id; S.rayaSel = S.rayaSem = null; S.rayaNav = []; viewRaya(); break;
+      case 'rnueva': abrirRayaForm(null); break;
+      case 'reditar': abrirRayaForm(id); break;
+      case 'rfcargar': abrirRayaForm(S.rayaForm.viernes); break;
+      case 'rfcancelar': S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); break;
+      case 'rfmas': { S.rayaForm.filas.push({ nombre: '', detalle: '', importe: '', nota: '' }); rfPintaFilas(); const ns = document.querySelectorAll('.rfN'); if (ns.length) ns[ns.length - 1].focus(); break; }
+      case 'rfquitar': { const F = S.rayaForm; F.filas.splice(Number(id), 1); if (!F.filas.length) F.filas.push({ nombre: '', detalle: '', importe: '', nota: '' }); rfPintaFilas(); break; }
+      case 'rfpegar': $('#rfPegar').classList.toggle('hidden'); if (!$('#rfPegar').classList.contains('hidden')) $('#rfPegarTxt').focus(); break;
+      case 'rfpegarok': {
+        const nuevas = rfParsePegado($('#rfPegarTxt').value); if (!nuevas.length) return toast('No encontré renglones con nombre e importe. Copia las columnas de nombre e importe.', 'err');
+        const F = S.rayaForm; F.filas = F.filas.filter(f => f.nombre.trim() || f.importe.trim()).concat(nuevas);
+        $('#rfPegarTxt').value = ''; $('#rfPegar').classList.add('hidden'); rfPintaFilas(); toast(`Se agregaron ${nuevas.length} renglones. Revísalos antes de guardar.`, 'ok'); break;
+      }
+      case 'rfguardar': await rfGuardar(el); break;
+      case 'rxls': await rayaExcel('all'); break;
+      case 'rxlsper': await rayaExcel('per', Number(id)); break;
+      case 'rxlssem': await rayaExcel('sem', id); break;
+      case 'rdups': modalParecidos(); break;
+      case 'rnodup': { let no = []; try { no = JSON.parse(localStorage.getItem('jocris_raya_nodup') || '[]'); } catch (e) { } no.push(id); try { localStorage.setItem('jocris_raya_nodup', JSON.stringify(no)); } catch (e) { } const c = document.getElementById('dup-' + id); if (c) c.remove(); break; }
+      case 'runir': {
+        const de = Number(el.dataset.de), a = Number(el.dataset.a) || Number(($('#tuSel') || {}).value);
+        if (!a) return toast('Elige con qué nombre se une.', 'err');
+        if (!el.dataset.ok) { el.dataset.ok = '1'; el.dataset.txt = el.textContent; el.textContent = '¿Seguro? Toca otra vez para unir'; el.classList.add('bad'); el.classList.remove('ghost'); return; }
+        const desdeDup = !!el.closest('[id^="dup-"]'); el.disabled = true;
+        const r = await rpc('caja_trab_unir', { p_de: de, p_a: a });
+        await cargarRaya(true); toast(`Listo: ${r && r.movidos || 0} pago(s) quedaron bajo ${S.raya.T[a] ? S.raya.T[a].nombre : 'el mismo nombre'}.`, 'ok');
+        if (S.rayaSel === de) S.rayaSel = a; S.rayaNav = (S.rayaNav || []).filter(x => x.sel !== de);
+        if (desdeDup) modalParecidos(); else closeModal();
+        viewRaya(); break;
+      }
+      case 'rper_edit': modalEditarPersona(S.raya.T[id]); break;
+      case 'rper_unir': modalUnirPersona(S.raya.T[id]); break;
+      case 'rper_editok': {
+        el.disabled = true;
+        await rpc('caja_trab_editar', { p_id: Number(id), p_nombre: $('#tpNom').value, p_tipo: $('#tpTipo').value, p_nota: $('#tpNota').value, p_activo: $('#tpAct').checked });
+        closeModal(); await cargarRaya(true); toast('Guardado.', 'ok'); viewRaya(); break;
+      }
+      case 'rdesdesem': S.rayaForm = null; S.rayaSel = null; S.rayaSem = id; S.rayaNav = []; go('raya', { keep: true }); break;
+      case 'rversem': S.semSel = id; go('sem', { keep: true }); break;
       case 'detalle': closeModal(); await openDetail(id); break;
       case 'abrir': await abrirPath(el.dataset.path); break;
       case 'tipo': if (S.F) { const keep = ['fFecha', 'fMonto', 'fNota'].map(k => [k, $('#' + k)?.value]); S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); keep.forEach(([k, v]) => { const e = $('#' + k); if (e && v != null) e.value = v; }); pintaSemInfo(); } break;
