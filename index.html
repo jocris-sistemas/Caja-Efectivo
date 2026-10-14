@@ -226,6 +226,7 @@ table.raya .chip{white-space:normal}
 .rfrow input{padding:10px}
 @media(max-width:640px){.rfrow{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 40px;border-bottom:1px dashed var(--line);padding-bottom:8px}.rfrow .n{grid-row:1}.rfrow .nm{grid-column:2/4;grid-row:1}.rfrow .x{grid-column:4;grid-row:1}.rfrow .dt{grid-column:2;grid-row:2}.rfrow .im{grid-column:3/5;grid-row:2}}
 .sumbar>div{flex:1 1 120px;min-width:0}
+.sl.evrow .m{display:flex;gap:6px;align-items:center}.sl.evrow a{color:var(--navy2)}
 .sl.rayalink{cursor:pointer;background:#f7f9fc}.sl.rayalink:hover{background:#eef3fa}.sl.rayalink .m{color:var(--mut)}
 input.autollenado{background:rgba(224,180,74,.16)!important;border-color:#e0b44a!important}
 </style>
@@ -1242,9 +1243,11 @@ const TIPO_TXT = { persona: 'Persona', empresa: 'Empresa', otro: 'Otro' };
 async function cargarRaya(force) {
   if (S.raya && !force) return S.raya;
   const trae = async mk => { let all = [], from = 0; for (;;) { const { data, error } = await mk().range(from, from + 999); if (error) throw error; all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000; } return all; };
-  const [t, r] = await Promise.all([
+  const [t, r, ev] = await Promise.all([
     trae(() => sb.from('caja_trabajadores').select('id,nombre,clave,alias,tipo,activo,nota').is('unido_a', null).order('id', { ascending: true })),
-    trae(() => sb.from('caja_raya').select('id,semana,orden,trabajador_id,nombre_lista,detalle,importe,nota,origen,creado_por_nombre,creado_en').eq('vigente', true).order('semana', { ascending: true }).order('orden', { ascending: true }).order('id', { ascending: true }))]);
+    trae(() => sb.from('caja_raya').select('id,semana,orden,trabajador_id,nombre_lista,detalle,importe,nota,origen,creado_por_nombre,creado_en').eq('vigente', true).order('semana', { ascending: true }).order('orden', { ascending: true }).order('id', { ascending: true })),
+    trae(() => sb.from('caja_raya_evidencia').select('id,semana,path,nombre,tamano,subido_por_nombre,creado_en').eq('activo', true).order('creado_en', { ascending: true }).order('id', { ascending: true }))]);
+  const E = {}; ev.forEach(x => (E[x.semana] || (E[x.semana] = [])).push(x));
   const T = {}; t.forEach(x => T[x.id] = { ...x, rows: [], c: 0, sem: new Set() });
   const W = {};
   r.forEach(x => {
@@ -1252,7 +1255,7 @@ async function cargarRaya(force) {
     const w = W[x.semana] || (W[x.semana] = { viernes: x.semana, rows: [], c: 0 }); w.rows.push(x); w.c += cents(x.importe);
   });
   const porClave = {}; t.forEach(x => { porClave[claveNom(x.nombre)] = T[x.id]; (x.alias || []).forEach(a => { const k = claveNom(a); if (!porClave[k]) porClave[k] = T[x.id]; }); });
-  S.raya = { T, trab: Object.values(T), rows: r, W, porClave };
+  S.raya = { T, trab: Object.values(T), rows: r, W, porClave, E };
   return S.raya;
 }
 // Total del grupo CONTRATISTAS por semana (llave: viernes)
@@ -1291,10 +1294,10 @@ async function viewRaya() {
     <div class="statgrid">
       <div class="stat"><div class="l">Pagado en listas</div><div class="v">${fmt(tot / 100)}</div><div class="mut sm">desde el ${desde ? esc(fcorta(desde)) + ' ' + desde.slice(0, 4) : '—'}</div></div>
       <div class="stat"><div class="l">Personas</div><div class="v">${conPagos.length}</div><div class="mut sm">${R.trab.length} en el catálogo</div></div>
-      <div class="stat"><div class="l">Semanas con lista</div><div class="v">${nSem} <span class="mut" style="font-size:14px">de ${todasV.length}</span></div></div>
+      <div class="stat"><div class="l">Semanas con lista</div><div class="v">${nSem} <span class="mut" style="font-size:14px">de ${todasV.length}</span></div><div class="mut sm">${Object.keys(R.E).length} con PDF de evidencia</div></div>
       <div class="stat"><div class="l">Promedio por semana</div><div class="v">${fmt(nSem ? Math.round(tot / nSem) / 100 : 0)}</div>${pres ? `<div class="mut sm">Préstamos: ${fmt(pres / 100)}</div>` : ''}</div></div>
     ${nFalta || nDif ? `<div class="card summary" data-act="rmodo" data-id="semanas" style="cursor:pointer"><div class="ico">${ICON.raya}</div><div class="grow"><div class="b">${[nFalta ? `${nFalta} semana(s) sin lista de raya` : '', nDif ? `${nDif} con diferencia contra el gasto semanal` : ''].filter(Boolean).join(' · ')}</div><div class="mut sm">Toca para ver las semanas.</div></div></div>` : ''}
-    <div class="row" style="margin-bottom:10px">${puedeRaya() ? '<button class="btn gold" data-act="rnueva">+ Capturar lista de raya</button>' : ''}<button class="btn ghost sm" data-act="rxls">Descargar Excel</button>${esAdmin() ? '<button class="btn ghost sm" data-act="rdups">Nombres parecidos</button>' : ''}</div>
+    <div class="row" style="margin-bottom:10px">${puedeRaya() ? '<button class="btn gold" data-act="rnueva">+ Capturar lista de raya</button><label class="btn ghost sm" style="cursor:pointer">Subir PDFs de evidencia<input type="file" id="evMasivo" accept="application/pdf" multiple hidden></label>' : ''}<button class="btn ghost sm" data-act="rxls">Descargar Excel</button>${esAdmin() ? '<button class="btn ghost sm" data-act="rdups">Nombres parecidos</button>' : ''}</div>
     <div class="seg rseg"><button class="${modo === 'personas' ? 'on' : ''}" data-act="rmodo" data-id="personas">Personas</button><button class="${modo === 'semanas' ? 'on' : ''}" data-act="rmodo" data-id="semanas">Semanas</button></div>
     <div id="rayaBody"></div>`;
   if (modo === 'semanas') {
@@ -1304,7 +1307,7 @@ async function viewRaya() {
       const m = v.slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
       const w = R.W[v], monto = c.lista ?? c.gasto;
       html += `<div class="item semitem st-${c.st}" data-act="rsem" data-id="${v}"><div class="top"><div class="hl b">Viernes ${esc(fcorta(v))} <span class="mut" style="font-weight:600">· ${esc(semEtq(lunesDe(v)))}</span></div><span class="money">${fmt(monto / 100)}</span></div>
-        <div class="mut sm">${w ? `${w.rows.length} renglones · ${new Set(w.rows.map(r => r.trabajador_id)).size} personas · ` : ''}${c.chip}</div><div class="bar"><i style="width:${Math.max(3, Math.round(monto / mx * 100))}%"></i></div></div>`;
+        <div class="mut sm">${w ? `${w.rows.length} renglones · ${new Set(w.rows.map(r => r.trabajador_id)).size} personas · ` : ''}${c.chip}${R.E[v] ? ' <span class="chip historial">PDF</span>' : ''}</div><div class="bar"><i style="width:${Math.max(3, Math.round(monto / mx * 100))}%"></i></div></div>`;
     });
     $('#rayaBody').innerHTML = html || `<div class="card empty">${ICON.empty}<div>Todavía no hay listas de raya.</div></div>`;
     return;
@@ -1379,6 +1382,7 @@ function viewRayaSemana(v) {
       <div class="d"><div class="l">Diferencia</div><div class="v ${c.st === 'dif' ? 'neg' : c.st === 'ok' ? 'pos' : ''}">${c.st === 'ok' ? '$0.00' : c.st === 'dif' ? fmt(c.d / 100) : '—'}</div><div class="sm">${c.chip}</div></div></div>
       ${c.st === 'dif' ? `<div class="warnbox" style="margin-bottom:0">La lista suma ${fmt(Math.abs(c.d) / 100)} ${c.d > 0 ? 'más' : 'menos'} que lo que se registró en CONTRATISTAS esa semana. Revisa la hoja física o corrige la lista.</div>` : ''}
       ${c.st === 'sinlista' ? `<div class="warnbox" style="margin-bottom:0">Esta semana tiene ${fmt(c.gasto / 100)} de CONTRATISTAS en el gasto semanal, pero todavía no se captura su lista de raya.</div>` : ''}</div>
+    ${htmlEvidencia(v)}
     ${rows.length ? `<div class="card" style="padding:4px 6px"><table class="raya"><thead><tr><th style="width:28px">#</th><th>Nombre</th><th>Obra / detalle</th><th class="r">Importe</th></tr></thead><tbody>
       ${rows.map((r, k) => { const p = S.raya.T[r.trabajador_id]; return `<tr data-act="rper" data-id="${r.trabajador_id}"><td class="mut">${k + 1}</td><td><b>${esc(p ? p.nombre : r.nombre_lista)}</b>${p && claveNom(r.nombre_lista) !== p.clave ? `<div class="mut sm">en la lista: ${esc(r.nombre_lista)}</div>` : ''}${r.nota ? `<div class="mut sm">${esc(r.nota)}</div>` : ''}</td><td>${r.detalle ? `<span class="chip ${esPrestamo(r) ? 'warn' : 'info'}">${esc(r.detalle)}</span>` : ''}</td><td class="m">${fmt(r.importe)}</td></tr>`; }).join('')}
       <tr class="tot"><td></td><td colspan="2">TOTAL · ${rows.length} renglones</td><td class="m">${fmt(w.c / 100)}</td></tr></tbody></table></div>
@@ -1547,6 +1551,47 @@ function modalUnirPersona(p) {
   $('#tuQ').oninput = () => { const q = claveNom($('#tuQ').value); [...$('#tuSel').options].forEach(o => o.hidden = q && !claveNom(o.textContent).includes(q)); };
 }
 
+
+/* ---- Evidencia: PDF de la lista firmada de cada viernes ---- */
+function htmlEvidencia(v) {
+  const ev = (S.raya.E || {})[v] || [];
+  return `<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><div><div class="b">Evidencia</div><div class="mut sm">PDF de la lista de raya firmada</div></div>${puedeRaya() ? `<label class="btn ghost sm" style="cursor:pointer">${ev.length ? 'Agregar otro PDF' : 'Subir PDF'}<input type="file" accept="application/pdf,image/*" multiple hidden data-evsem="${v}"></label>` : ''}</div>
+    ${ev.length ? `<div style="margin-top:8px">${ev.map(e => `<div class="sl evrow"><div class="c"><a href="#" data-act="abrir" data-path="${esc(e.path)}"><b>${esc(e.nombre || 'Lista de raya.pdf')}</b></a><small>Subió ${esc(e.subido_por_nombre || '')} · ${esc(fdt(e.creado_en))}${e.tamano ? ' · ' + Math.round(e.tamano / 1024) + ' KB' : ''}</small></div><div class="m"><button class="btn ghost sm" data-act="abrir" data-path="${esc(e.path)}">Ver</button>${esAdmin() ? ` <button class="btn ghost sm" data-act="evquitar" data-id="${e.id}">Quitar</button>` : ''}</div></div>`).join('')}</div>`
+      : '<div class="mut sm" style="margin-top:8px">Todavía no hay PDF de esta lista.</div>'}</div>`;
+}
+async function subirEvidencia(v, files) {
+  v = viernesDe(v);
+  const blob = await filesToPdf(files);
+  const base = files.length === 1 ? files[0].name.replace(/\.(pdf|jpe?g|png|webp|heic)$/i, '') : `Raya_viernes_${v}`;
+  const path = `caja/raya/${v}/raya-${v}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.pdf`;
+  const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf' });
+  if (up.error) throw up.error;
+  await rpc('caja_raya_evidencia_registrar', { p_semana: v, p_path: path, p_nombre: base + '.pdf', p_tamano: blob.size || null });
+}
+const fechaEnNombre = n => { const m = String(n || '').match(/(20\d{2})[-_.](\d{2})[-_.](\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
+function modalEvMasivo(files) {
+  const contr = contrPorVie();
+  const items = files.map(f => { const d = fechaEnNombre(f.name), v = d ? viernesDe(d) : null; return { f, v, c: v ? cuadreDe(v, contr) : null, ya: v ? ((S.raya.E || {})[v] || []).length : 0 }; });
+  S._evMas = items;
+  const ok = items.filter(x => x.v);
+  openModal(`<h2 style="margin-top:0">Subir PDFs de evidencia</h2><div class="mut sm" style="margin-bottom:10px">Cada PDF se guarda en el viernes que trae en el nombre del archivo (por ejemplo <b>Raya_viernes_2026-03-13.pdf</b>).</div>
+    <div class="card" style="padding:0;overflow:hidden">${items.map(x => `<div class="sl"><div class="c"><b>${esc(x.f.name)}</b><small>${x.v ? `Viernes ${esc(fcorta(x.v))} ${x.v.slice(0, 4)} · ${x.c.chip}${x.ya ? ` · <span class="chip warn">ya tiene ${x.ya} PDF: se agrega otro</span>` : ''}` : '<span class="chip bad">No trae la fecha AAAA-MM-DD en el nombre: no se sube</span>'}</small></div><div class="m mut">${Math.round(x.f.size / 1024)} KB</div></div>`).join('')}</div>
+    <div id="evMasEstado" class="mut sm" style="margin:8px 2px"></div>
+    <div class="row" style="margin-top:10px"><button class="btn gold" data-act="evmasok" ${ok.length ? '' : 'disabled'}>Subir ${ok.length} archivo(s)</button><button class="btn ghost" data-act="close">Cancelar</button></div>`);
+}
+async function evMasivoSubir(btn) {
+  const items = (S._evMas || []).filter(x => x.v); let n = 0; const fallas = [];
+  btn.disabled = true;
+  for (const x of items) {
+    const st = $('#evMasEstado'); if (st) st.textContent = `Subiendo ${n + 1} de ${items.length}: ${x.f.name}…`;
+    try { await subirEvidencia(x.v, [x.f]); n++; } catch (e) { fallas.push(`${x.f.name}: ${errMsg(e)}`); }
+  }
+  S._evMas = null; await cargarRaya(true);
+  if (fallas.length) { const st = $('#evMasEstado'); if (st) st.innerHTML = `<div class="warnbox">Se subieron ${n} de ${items.length}. No se pudieron subir:<br>${fallas.map(esc).join('<br>')}</div>`; btn.disabled = false; }
+  else { closeModal(); toast(`Listo: ${n} PDF(s) guardados como evidencia.`, 'ok'); }
+  viewRaya();
+}
+
 /* ---- Excel ---- */
 async function rayaExcel(modo, id) {
   await cargarSheetJS(); await Promise.all([cargarRaya(), cargarHist()]);
@@ -1565,7 +1610,7 @@ async function rayaExcel(modo, id) {
     hoja([...R.rows].map(det), 'Detalle');
     hoja(R.trab.filter(p => p.rows.length).sort((a, b) => b.c - a.c).map(p => ({ Persona: p.nombre, Tipo: TIPO_TXT[p.tipo] || p.tipo, 'También como': (p.alias || []).join(', '), Semanas: p.sem.size, Pagos: p.rows.length, Total: p.c / 100, 'Promedio semanal': Math.round(p.c / p.sem.size) / 100, 'Primer pago': p.rows[0].semana, 'Último pago': p.rows[p.rows.length - 1].semana })), 'Por persona');
     const vs = [...new Set([...Object.keys(R.W), ...Object.keys(contr)])].sort();
-    hoja(vs.map(v => { const c = cuadreDe(v, contr); return { 'Viernes de pago': v, 'No. semana': semNum(lunesDe(v)), Personas: R.W[v] ? new Set(R.W[v].rows.map(r => r.trabajador_id)).size : 0, 'Total lista': c.lista != null ? c.lista / 100 : '', 'CONTRATISTAS gasto semanal': c.gasto != null ? c.gasto / 100 : '', Diferencia: c.st === 'dif' ? c.d / 100 : c.st === 'ok' ? 0 : '', Estado: { ok: 'Cuadra', dif: 'Diferencia', sinlista: 'Falta lista', singasto: 'Sin gasto semanal' }[c.st] }; }), 'Por semana');
+    hoja(vs.map(v => { const c = cuadreDe(v, contr); return { 'Viernes de pago': v, 'No. semana': semNum(lunesDe(v)), Personas: R.W[v] ? new Set(R.W[v].rows.map(r => r.trabajador_id)).size : 0, 'Total lista': c.lista != null ? c.lista / 100 : '', 'CONTRATISTAS gasto semanal': c.gasto != null ? c.gasto / 100 : '', Diferencia: c.st === 'dif' ? c.d / 100 : c.st === 'ok' ? 0 : '', Estado: { ok: 'Cuadra', dif: 'Diferencia', sinlista: 'Falta lista', singasto: 'Sin gasto semanal' }[c.st], 'PDF evidencia': (R.E[v] || []).length ? 'SI' : '' }; }), 'Por semana');
     XLSX.writeFile(wb, `Listas_de_raya_${today()}.xlsx`);
   }
   toast('Excel descargado.', 'ok');
@@ -1646,8 +1691,17 @@ const aMayus = ev => {
 };
 document.addEventListener('input', aMayus, true);
 document.addEventListener('compositionend', aMayus, true);
-document.addEventListener('change', ev => {
+document.addEventListener('change', async ev => {
   const el = ev.target;
+  if (el.id === 'evMasivo' && el.files && el.files.length) { const fs = [...el.files]; el.value = ''; modalEvMasivo(fs); return; }
+  if (el.dataset && el.dataset.evsem && el.files && el.files.length) {
+    const fs = [...el.files], v = el.dataset.evsem; el.value = '';
+    const otra = fs.map(f => fechaEnNombre(f.name)).find(d => d && viernesDe(d) !== v);
+    if (otra) return toast(`Ese archivo es del viernes ${fcorta(viernesDe(otra))} ${otra.slice(0, 4)}, no de esta semana. Súbelo en su semana.`, 'err');
+    toast('Subiendo PDF…');
+    try { await subirEvidencia(v, fs); await cargarRaya(true); toast('PDF guardado como evidencia.', 'ok'); viewRaya(); } catch (e) { toast(errMsg(e), 'err'); }
+    return;
+  }
   if (el.id === 'fSinT' && S.F) { S.F.sinT = el.checked; S.F.motivoT = ''; pintaTicket(); }
   if (el.id === 'fMotivoT' && S.F) S.F.motivoT = el.value;
   if (el.id === 'fRec' && S.F) { S.F.rec = el.checked; pintaRecibo(); pintaTicket(); }
@@ -1724,6 +1778,11 @@ document.addEventListener('click', async ev => {
       }
       case 'rdesdesem': S.rayaForm = null; S.rayaSel = null; S.rayaSem = id; S.rayaNav = []; go('raya', { keep: true }); break;
       case 'rversem': S.semSel = id; go('sem', { keep: true }); break;
+      case 'evmasok': await evMasivoSubir(el); break;
+      case 'evquitar': {
+        if (!el.dataset.ok) { el.dataset.ok = '1'; el.textContent = '¿Seguro?'; el.classList.add('bad'); el.classList.remove('ghost'); return; }
+        el.disabled = true; await rpc('caja_raya_evidencia_quitar', { p_id: Number(id) }); await cargarRaya(true); toast('PDF quitado.', 'ok'); viewRaya(); break;
+      }
       case 'detalle': closeModal(); await openDetail(id); break;
       case 'abrir': await abrirPath(el.dataset.path); break;
       case 'tipo': if (S.F) { const keep = ['fFecha', 'fMonto', 'fNota'].map(k => [k, $('#' + k)?.value]); S.F.tipo = el.dataset.tipo; S.F.sinT = false; pintaForm(); keep.forEach(([k, v]) => { const e = $('#' + k); if (e && v != null) e.value = v; }); pintaSemInfo(); } break;
