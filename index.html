@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="Caja">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Caja de Efectivo · Jocris</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
 <style>
 
 :root{
@@ -239,7 +239,7 @@ input.autollenado{background:rgba(224,180,74,.16)!important;border-color:#e0b44a
 <script>
 /* ===================== CONFIG ===================== */
 // La Caja ahora se abre dentro de Control de Cheques (mismo link y mismo usuario). Si alguien entra por el link viejo, se le manda allá.
-const EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window;
+const EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window && (location.protocol !== 'https:' || (() => { try { return window.parent.location.origin === location.origin; } catch (e) { return false; } })());
 if (!EMBED && location.protocol === 'https:') { location.replace('../Control-Cheques/#caja'); throw new Error('La Caja ahora está dentro de Control de Cheques'); }
 if (EMBED) document.documentElement.classList.add('embed');
 const avisaPadre = msg => { try { window.parent.postMessage(msg, location.origin === 'null' ? '*' : location.origin); } catch (e) { } };
@@ -250,6 +250,7 @@ const BUCKET = 'cheques-archivos';
 const PAGE = 40;
 if (!window.supabase) { document.addEventListener('DOMContentLoaded', () => { const a = document.getElementById('app'); if (a) a.innerHTML = '<div class="login"><div class="box"><div class="warnbox">No hay conexión a internet. Conéctate y vuelve a abrir la app.</div><button class="btn gold" onclick="location.reload()">Reintentar</button></div></div>'; }); throw new Error('Sin conexión: no cargó supabase-js'); }
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+async function cerrarSesion() { try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { } if (EMBED) avisaPadre({ caja: 'sesion' }); location.reload(); }
 
 /* ===================== ESTADO ===================== */
 const S = { perfil: null, cargos: [], tab: 'caja', saldo: null, F: null, filt: { q: '', mes: '', tipo: '', cargo: '' }, list: [], count: 0, page: 0, meses: [] };
@@ -260,7 +261,7 @@ const cents = n => Math.round(Number(n || 0) * 100);
 const fdate = d => { if (!d) return ''; const [y, m, dd] = String(d).slice(0, 10).split('-'); return `${dd}/${m}/${y}`; };
 const fdt = d => d ? new Date(d).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '';
 const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
-const parseMoney = s => { const t = String(s ?? '').replace(/[$,\s]/g, ''); if (t === '') return NaN; const n = Number(t); return isFinite(n) ? n : NaN; };
+const parseMoney = s => { const t = String(s ?? '').replace(/[$\s]/g, ''); if (!/^-?(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(t)) return NaN; const n = Number(t.replace(/,/g, '')); return isFinite(n) ? n : NaN; };
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const mesTxt = ym => { const [y, m] = ym.split('-'); return `${MESES[Number(m) - 1]} ${y}`; };
 const fdia = d => { const [y, m, dd] = d.split('-'); return `${Number(dd)} de ${MESES[Number(m) - 1]} de ${y}`; };
@@ -273,6 +274,7 @@ const mxDia = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/
 const hoyMx = () => mxDia(new Date());
 const errMsg = e => (e && (e.message || e.error_description)) || String(e);
 const archAct = m => (m.caja_archivos || []).filter(a => a.activo);
+async function traePag(mk) { let all = [], from = 0; for (;;) { const { data, error } = await mk().range(from, from + 999); if (error) throw error; all = all.concat(data || []); if (!data || data.length < 1000) break; from += 1000; } return all; }
 /* Semanas de lunes a domingo (fechas 'AAAA-MM-DD' en UTC para no brincar de día) */
 const addDias = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const diaSem = d => new Date(d + 'T00:00:00Z').getUTCDay();   // 0 = domingo
@@ -302,7 +304,7 @@ window.atras = () => {
   const ov = document.querySelector('body > .overlay'); if (ov) { const no = ov.querySelector('#fzNo, #esOrig, #esOrig2'); if (no) no.click(); return true; }
   if ($('#modal').innerHTML) { closeModal(); return true; }
   if (S.tab === 'sem' && S.semSel) { S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); return true; }
-  if (S.tab === 'raya' && S.rayaForm) { S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); return true; }
+  if (S.tab === 'raya' && S.rayaForm) { if (rfConDatos() && !confirm('¿Descartar la lista sin guardar?')) return true; S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); return true; }
   if (S.tab === 'raya' && (S.rayaSel || S.rayaSem)) { rayaAtras(); return true; }
   if (S.tab !== 'caja') { go('caja'); return true; }
   return false;
@@ -385,7 +387,9 @@ function renderShell() {
   <nav class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${ICON[k] || ''}<span>${l}</span></button>`).join('')}</nav>`;
   go(S.tab);
 }
+function rfConDatos() { return !!(S.rayaForm && S.rayaForm.filas.some(f => f.nombre.trim() || f.importe.trim())); }
 function go(tab, opts) {
+  if (S.tab === 'raya' && tab !== 'raya' && rfConDatos() && !confirm('Tienes una lista de raya sin guardar. ¿Salir y perder los cambios?')) return;
   S.tab = tab;
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   if (tab !== 'nuevo') S.F = null;
@@ -422,7 +426,7 @@ async function viewCaja() {
     const ok = r => { if (r.error) throw r.error; return r.data || []; };
     const movs = ok(await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').gte('fecha', desde).lt('fecha', nx > addDias(lun, 7) ? nx : addDias(lun, 7)).order('fecha', { ascending: false }));
     const rec = ok(await sb.from('caja_movimientos').select(SEL).order('creado_en', { ascending: false }).limit(8));
-    const sinT = ok(await sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).limit(1000));
+    const sinT = await traePag(() => sb.from('caja_movimientos').select(SEL).eq('estatus', 'vigente').eq('tipo', 'gasto').eq('es_historial', false).order('fecha', { ascending: false }).order('id', { ascending: true }));
     if (S.tab !== 'caja') return;
     const gas = movs.filter(x => x.tipo === 'gasto' && !x.es_historial), suma = arr => arr.reduce((a, x) => a + cents(x.monto), 0) / 100;
     const sem = gas.filter(x => x.fecha >= lun && x.fecha <= addDias(lun, 6)), semAnt = gas.filter(x => x.fecha >= lunAnt && x.fecha < lun);
@@ -468,9 +472,9 @@ async function viewMov(opts) {
   cargarMeses(); S.page = 0; loadMov();
 }
 async function cargarMeses() {
-  const r = await sb.from('caja_movimientos').select('fecha').order('fecha', { ascending: false }).limit(5000);
+  let fs = []; try { fs = await traePag(() => sb.from('caja_movimientos').select('id,fecha').order('fecha', { ascending: false }).order('id', { ascending: true })); } catch (e) { fs = []; }
   if (S.tab !== 'mov') return;
-  const set = [...new Set((r.data || []).map(x => String(x.fecha).slice(0, 7)))].sort().reverse();
+  const set = [...new Set(fs.map(x => String(x.fecha).slice(0, 7)))].sort().reverse();
   S.meses = set; const el = $('#fmes'); if (!el) return;
   el.innerHTML = `<option value="">Todos los meses</option>` + set.map(m => `<option value="${m}" ${S.filt.mes === m ? 'selected' : ''}>${esc(mesTxt(m))}</option>`).join('');
 }
@@ -606,7 +610,7 @@ function cargarOpenCV() {
   if (_cvP) return _cvP;
   _cvP = new Promise((ok, no) => {
     const sc = document.createElement('script'); sc.async = true;
-    sc.src = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.12.0-release.1/dist/opencv.js';
+    sc.src = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.12.0-release.1/dist/opencv.js'; sc.integrity = 'sha384-i8A4fJEsRcMFMyEEDNri/2MR12DhkFLlUF+9oxUrxs6prIcRj7YtWAQ1OJ+iE0C7'; sc.crossOrigin = 'anonymous';
     sc.onload = () => { const t0 = Date.now(); const iv = setInterval(() => { const c = window.cv; if (c && c.Mat) { clearInterval(iv); try { delete c.then; } catch (e) { } window.__cvMod = c; ok(c); } else if (Date.now() - t0 > 60000) { clearInterval(iv); _cvP = null; no(new Error('OpenCV no inicializó')); } }, 80); };
     sc.onerror = () => { _cvP = null; no(new Error('No se pudo cargar el detector de orillas.')); };
     document.head.appendChild(sc);
@@ -834,10 +838,10 @@ async function subirArchivo(movId, files) {
   await rpc('caja_registrar_archivo', { p_mov: movId, p_path: path, p_nombre: nombre });
 }
 async function abrirPath(path) {
-  const w = window.open('', '_blank');
-  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 300);
-  if (error) { if (w) w.close(); return toast(errMsg(error), 'err'); }
-  if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  const w = window.open('', '_blank'); if (w) { try { w.opener = null; } catch (e) { } }
+  let r; try { r = await sb.storage.from(BUCKET).createSignedUrl(path, 300); } catch (e) { r = { error: e }; }
+  if (r.error) { if (w) w.close(); return toast(errMsg(r.error), 'err'); }
+  if (w) w.location = r.data.signedUrl; else toast('Permite ventanas emergentes para ver el documento.', 'err');
 }
 
 /* ===================== LECTURA AUTOMÁTICA DEL TICKET ===================== */
@@ -1276,6 +1280,7 @@ function rayaAtras() { const p = (S.rayaNav || []).pop() || {}; S.rayaSel = p.se
 const backRaya = txt => `<div class="semnav"><button class="btn ghost sm" data-act="rback">← ${esc(txt || 'Regresar')}</button></div>`;
 
 async function viewRaya() {
+  if (S.tab !== 'raya') return;
   if (S.rayaForm) return viewRayaForm();
   $('#view').innerHTML = `<div class="spin">Cargando…</div>`;
   try { await Promise.all([cargarRaya(), cargarHist()]); } catch (e) { return $('#view').innerHTML = `<div class="warnbox">${esc(errMsg(e))}</div>`; }
@@ -1397,7 +1402,7 @@ function abrirRayaForm(v) {
   const w = S.raya && S.raya.W[v];
   const filas = w ? [...w.rows].sort((a, b) => a.orden - b.orden).map(r => ({ nombre: r.nombre_lista, detalle: r.detalle || '', importe: String(Number(r.importe)), nota: r.nota || '', origen: r.origen })) : [];
   while (filas.length < 3) filas.push({ nombre: '', detalle: '', importe: '', nota: '' });
-  S.rayaForm = { viernes: v, filas, existia: !!w };
+  S.rayaForm = { viernes: v, filas, existia: !!w, orig: w ? v : null };
   viewRaya(); window.scrollTo(0, 0); avisaNav();
 }
 function rfHint(f) {
@@ -1448,6 +1453,7 @@ function viewRayaForm() {
   rfPintaSemInfo(); rfPintaFilas();
   $('#rfFecha').onchange = () => {
     const v = $('#rfFecha').value; if (!v) return;
+    if (F.orig && viernesDe(v) !== F.orig) { $('#rfFecha').value = F.viernes; return toast('Esta lista ya está guardada en el viernes ' + fcorta(F.orig) + '. Para cambiarla de semana, captúrala en el nuevo viernes.', 'err'); }
     F.viernes = viernesDe(v); $('#rfFecha').value = F.viernes; F.existia = false;
     const vacia = !F.filas.some(f => f.nombre.trim() || f.importe.trim());
     if (vacia && S.raya.W[F.viernes]) return abrirRayaForm(F.viernes);
@@ -1461,7 +1467,7 @@ function viewRayaForm() {
   };
   $('#rfFilas').addEventListener('focusout', ev => {
     const el = ev.target, i = Number(el.dataset.i); if (isNaN(i)) return; const f = F.filas[i];
-    if (el.classList.contains('rfN')) { const m = f.nombre.match(/\(([^)]*)\)/); if (m && !f.detalle.trim()) { f.detalle = m[1].trim(); f.nombre = f.nombre.replace(/\s*\([^)]*\)\s*/g, ' ').trim(); rfPintaFilas(); } }
+    if (el.classList.contains('rfN')) { const m = f.nombre.match(/\(([^)]*)\)/); if (m && !f.detalle.trim()) { f.detalle = m[1].trim(); f.nombre = f.nombre.replace(/\s*\([^)]*\)\s*/g, ' ').trim(); el.value = f.nombre; const d = el.closest('.rfrow').querySelector('.rfD'); if (d) d.value = f.detalle; const h = $('#rfH' + i); if (h) h.innerHTML = rfHint(f); } }
     if (el.classList.contains('rfI')) { const v = parseMoney(f.importe); if (!isNaN(v) && f.importe.trim()) { el.value = f.importe = v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } }
   });
 }
@@ -1493,15 +1499,18 @@ async function rfGuardar(btn) {
     if (isNaN(v) || v <= 0) return toast(`Renglón ${F.filas.indexOf(f) + 1} (${f.nombre}): escribe un importe mayor a cero.`, 'err');
   }
   btn.disabled = true; btn.textContent = 'Guardando…';
+  let res;
   try {
-    const res = await rpc('caja_raya_guardar', { p_semana: F.viernes, p_filas: filas.map(f => ({ nombre: f.nombre.trim().toUpperCase(), detalle: (f.detalle || '').trim().toUpperCase(), importe: parseMoney(f.importe), nota: f.nota || '', origen: f.origen || 'app' })) });
-    const v = res && res.semana || F.viernes;
-    S.rayaForm = null; S.raya = null; S.rayaNav = []; S.rayaSel = null; S.rayaSem = v;
+    res = await rpc('caja_raya_guardar', { p_semana: F.viernes, p_filas: filas.map(f => ({ nombre: f.nombre.trim().toUpperCase(), detalle: (f.detalle || '').trim().toUpperCase(), importe: parseMoney(f.importe), nota: f.nota || '', origen: f.origen || 'app' })) });
+  } catch (e) { btn.disabled = false; btn.textContent = 'Guardar lista'; throw e; }
+  const v = res && res.semana || F.viernes;
+  S.rayaForm = null; S.raya = null; S.rayaNav = []; S.rayaSel = null; S.rayaSem = v;
+  try {
     await cargarRaya(true);
     const c = cuadreDe(v, contrPorVie());
     toast(c.st === 'ok' ? 'Lista guardada. ✓ Cuadra con CONTRATISTAS.' : c.st === 'dif' ? `Lista guardada, pero hay diferencia de ${fmt(c.d / 100)} contra CONTRATISTAS.` : 'Lista guardada.', c.st === 'dif' ? 'err' : 'ok');
-    viewRaya(); window.scrollTo(0, 0); avisaNav();
-  } catch (e) { btn.disabled = false; btn.textContent = 'Guardar lista'; throw e; }
+  } catch (e) { toast('La lista sí se guardó, pero no se pudo recargar la pantalla: ' + errMsg(e), 'err'); }
+  viewRaya(); window.scrollTo(0, 0); avisaNav();
 }
 
 /* ---- Catálogo: editar / unir / nombres parecidos (solo administrador) ---- */
@@ -1548,7 +1557,9 @@ function modalUnirPersona(p) {
     <label class="f">Es la misma persona que</label><input type="text" id="tuQ" placeholder="Buscar…" autocomplete="off">
     <select id="tuSel" size="8" style="margin-top:6px">${otros.map(x => `<option value="${x.id}">${esc(x.nombre)} · ${x.sem.size} sem · ${fmt(x.c / 100)}</option>`).join('')}</select>
     <div class="row" style="margin-top:14px"><button class="btn" data-act="runir" data-de="${p.id}" data-a="" id="tuOk">Unir</button><button class="btn ghost" data-act="close">Cancelar</button></div>`);
-  $('#tuQ').oninput = () => { const q = claveNom($('#tuQ').value); [...$('#tuSel').options].forEach(o => o.hidden = q && !claveNom(o.textContent).includes(q)); };
+  const reiniciaOk = () => { const b = $('#tuOk'); if (b) { b.removeAttribute('data-ok'); b.textContent = 'Unir'; b.classList.remove('bad'); } };
+  $('#tuQ').oninput = () => { const q = claveNom($('#tuQ').value), sel = $('#tuSel'); [...sel.options].forEach(o => o.hidden = q && !claveNom(o.textContent).includes(q)); if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = ''; reiniciaOk(); };
+  $('#tuSel').onchange = reiniciaOk;
 }
 
 
@@ -1619,7 +1630,7 @@ async function rayaExcel(modo, id) {
 async function pintaRayaLink(lunes) {
   const box = $('#rayaLink'); if (!box) return;
   try { await cargarRaya(); } catch (e) { return; }
-  const b2 = $('#rayaLink'); if (!b2 || S.tab !== 'sem') return;
+  const b2 = $('#rayaLink'); if (!b2 || S.tab !== 'sem' || S.semSel !== lunes) return;
   const v = addDias(lunes, 4), w = S.raya.W[v], c = cuadreDe(v, contrPorVie());
   b2.innerHTML = `<div class="sl rayalink" data-act="rdesdesem" data-id="${v}"><div class="c"><b>${w ? `Ver lista de raya · ${new Set(w.rows.map(r => r.trabajador_id)).size} personas` : 'Lista de raya'}</b><small>Viernes ${esc(fcorta(v))} · ${c.chip}</small></div><div class="m">›</div></div>`;
 }
@@ -1644,14 +1655,14 @@ async function viewBit() {
 function menuCuenta() {
   openModal(`<h2 style="margin-top:0">Mi cuenta</h2><div class="card"><div class="b">${esc(S.perfil.nombre)}</div><div class="mut">${esc(S.perfil.correo)} · ${esc(rolTxt(S.perfil.rol))}</div></div>
   <h3>Control de Cheques</h3><a class="btn ghost" href="https://jocris-sistemas.github.io/Control-Cheques/" style="text-decoration:none">Ir a Control de Cheques</a>
-  <h3>Cambiar contraseña</h3><label class="f">Nueva contraseña (mínimo 8 caracteres)</label>${pwField('np1', 'new-password')}<label class="f">Repítela</label>${pwField('np2', 'new-password')}
+  <h3>Cambiar contraseña</h3><label class="f">Contraseña actual</label>${pwField('np0', 'current-password')}<label class="f">Nueva contraseña (mínimo 8 caracteres)</label>${pwField('np1', 'new-password')}<label class="f">Repítela</label>${pwField('np2', 'new-password')}
   <div class="row" style="margin-top:12px"><button class="btn" data-act="cambiarpass">Guardar contraseña</button><button class="btn ghost" data-act="salir">Cerrar sesión</button></div>
   <h3>Respaldo</h3><div class="mut sm" style="margin-bottom:6px">Descarga todos los movimientos, arqueos y la bitácora de la caja en un Excel.</div><button class="btn ghost" id="btnRespaldo" data-act="respaldo">Descargar respaldo en Excel</button>`);
 }
 function cargarSheetJS() {
   return new Promise((res, rej) => {
     if (window.XLSX) return res();
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.integrity = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'; s.crossOrigin = 'anonymous';
     s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar el generador de Excel. Revisa tu internet.')); document.head.appendChild(s);
   });
 }
@@ -1698,8 +1709,9 @@ document.addEventListener('change', async ev => {
     const fs = [...el.files], v = el.dataset.evsem; el.value = '';
     const otra = fs.map(f => fechaEnNombre(f.name)).find(d => d && viernesDe(d) !== v);
     if (otra) return toast(`Ese archivo es del viernes ${fcorta(viernesDe(otra))} ${otra.slice(0, 4)}, no de esta semana. Súbelo en su semana.`, 'err');
-    toast('Subiendo PDF…');
-    try { await subirEvidencia(v, fs); await cargarRaya(true); toast('PDF guardado como evidencia.', 'ok'); viewRaya(); } catch (e) { toast(errMsg(e), 'err'); }
+    if (S._evSub) return toast('Espera a que termine la subida anterior.', 'err');
+    S._evSub = true; toast('Subiendo PDF…');
+    try { await subirEvidencia(v, fs); await cargarRaya(true); toast('PDF guardado como evidencia.', 'ok'); viewRaya(); } catch (e) { toast(errMsg(e), 'err'); } finally { S._evSub = false; }
     return;
   }
   if (el.id === 'fSinT' && S.F) { S.F.sinT = el.checked; S.F.motivoT = ''; pintaTicket(); }
@@ -1718,12 +1730,15 @@ document.addEventListener('click', async ev => {
       case 'ovl': if (ev.target === el) closeModal(); break;
       case 'close': closeModal(); break;
       case 'menu': menuCuenta(); break;
-      case 'salir': await sb.auth.signOut(); S.perfil = null; closeModal(); renderLogin(); break;
+      case 'salir': await cerrarSesion(); break;
       case 'verpass': { const i = document.getElementById(el.dataset.for); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; el.innerHTML = show ? EYE_OFF : EYE; break; }
       case 'cambiarpass': {
-        const a = $('#np1').value, b = $('#np2').value;
+        const a0 = $('#np0').value, a = $('#np1').value, b = $('#np2').value;
+        if (!a0) return toast('Escribe tu contraseña actual.', 'err');
         if (a.length < 8) return toast('La contraseña debe tener al menos 8 caracteres.', 'err');
         if (a !== b) return toast('Las contraseñas no coinciden.', 'err');
+        el.disabled = true; const v = await sb.auth.signInWithPassword({ email: S.perfil.correo, password: a0 }); el.disabled = false;
+        if (v.error) return toast('La contraseña actual no es correcta.', 'err');
         const { error } = await sb.auth.updateUser({ password: a }); if (error) throw error; toast('Contraseña actualizada.', 'ok'); closeModal(); break;
       }
       case 'respaldo': await respaldoExcel(); break;
@@ -1743,7 +1758,7 @@ document.addEventListener('click', async ev => {
       case 'rnueva': abrirRayaForm(null); break;
       case 'reditar': abrirRayaForm(id); break;
       case 'rfcargar': abrirRayaForm(S.rayaForm.viernes); break;
-      case 'rfcancelar': S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); break;
+      case 'rfcancelar': if (rfConDatos() && !confirm('¿Descartar la lista sin guardar?')) break; S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); break;
       case 'rfmas': { S.rayaForm.filas.push({ nombre: '', detalle: '', importe: '', nota: '' }); rfPintaFilas(); const ns = document.querySelectorAll('.rfN'); if (ns.length) ns[ns.length - 1].focus(); break; }
       case 'rfquitar': { const F = S.rayaForm; F.filas.splice(Number(id), 1); if (!F.filas.length) F.filas.push({ nombre: '', detalle: '', importe: '', nota: '' }); rfPintaFilas(); break; }
       case 'rfpegar': $('#rfPegar').classList.toggle('hidden'); if (!$('#rfPegar').classList.contains('hidden')) $('#rfPegarTxt').focus(); break;
@@ -1761,7 +1776,7 @@ document.addEventListener('click', async ev => {
       case 'runir': {
         const de = Number(el.dataset.de), a = Number(el.dataset.a) || Number(($('#tuSel') || {}).value);
         if (!a) return toast('Elige con qué nombre se une.', 'err');
-        if (!el.dataset.ok) { el.dataset.ok = '1'; el.dataset.txt = el.textContent; el.textContent = '¿Seguro? Toca otra vez para unir'; el.classList.add('bad'); el.classList.remove('ghost'); return; }
+        if (!el.dataset.ok) { el.dataset.ok = '1'; el.dataset.txt = el.textContent; el.textContent = `¿Unir con ${S.raya.T[a] ? S.raya.T[a].nombre : '?'}? Toca otra vez`; el.classList.add('bad'); el.classList.remove('ghost'); return; }
         const desdeDup = !!el.closest('[id^="dup-"]'); el.disabled = true;
         const r = await rpc('caja_trab_unir', { p_de: de, p_a: a });
         await cargarRaya(true); toast(`Listo: ${r && r.movidos || 0} pago(s) quedaron bajo ${S.raya.T[a] ? S.raya.T[a].nombre : 'el mismo nombre'}.`, 'ok');
@@ -1824,7 +1839,10 @@ document.addEventListener('click', async ev => {
     }
   } catch (e) { toast(errMsg(e), 'err'); if (el && el.disabled) el.disabled = false; }
 });
-sb.auth.onAuthStateChange((ev, session) => { if (ev === 'SIGNED_OUT' && S.perfil) { S.perfil = null; renderLogin(); } });
+sb.auth.onAuthStateChange((ev, session) => {
+  if (ev === 'SIGNED_OUT' && S.perfil) { S.perfil = null; location.reload(); }
+  else if (ev === 'SIGNED_IN' && S.perfil && session && session.user && session.user.id !== S.perfil.id) { S.perfil = null; location.reload(); }
+});
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot().catch(e => renderLogin('No se pudo cargar: ' + errMsg(e)));
 </script>
