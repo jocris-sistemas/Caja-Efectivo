@@ -253,6 +253,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { pe
 async function cerrarSesion() { try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { } if (EMBED) avisaPadre({ caja: 'sesion' }); location.reload(); }
 
 /* ===================== ESTADO ===================== */
+const navGet = k => { try { const o = JSON.parse(localStorage.getItem(k) || 'null'); return o && Date.now() - o.t < 43200000 ? o.v : null; } catch (e) { return null; } };
+const navSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify({ v, t: Date.now() })); } catch (e) { } };
 const S = { perfil: null, cargos: [], tab: 'sem', saldo: null, F: null, filt: { q: '', mes: '', tipo: '', cargo: '' }, list: [], count: 0, page: 0, meses: [] };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -371,7 +373,7 @@ async function boot() {
   if (c.error) throw c.error;
   S.cargosTodos = c.data || [];
   S.cargos = S.cargosTodos.filter(x => (x.activo || x.solo_caja) && x.nombre !== 'SIN CARGO').sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
-  S.tab = 'sem';
+  S.tab = ['sem', 'raya'].includes(navGet('jc_caja_tab')) ? navGet('jc_caja_tab') : 'sem';
   renderShell();
 }
 
@@ -389,6 +391,7 @@ function renderShell() {
 }
 function rfConDatos() { return !!(S.rayaForm && S.rayaForm.filas.some(f => f.nombre.trim() || f.importe.trim())); }
 function go(tab, opts) {
+  navSet('jc_caja_tab', tab);
   if (S.tab === 'raya' && tab !== 'raya' && rfConDatos() && !confirm('Tienes una lista de raya sin guardar. ¿Salir y perder los cambios?')) return;
   S.tab = tab;
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
