@@ -253,7 +253,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { pe
 async function cerrarSesion() { try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { } if (EMBED) avisaPadre({ caja: 'sesion' }); location.reload(); }
 
 /* ===================== ESTADO ===================== */
-const S = { perfil: null, cargos: [], tab: 'caja', saldo: null, F: null, filt: { q: '', mes: '', tipo: '', cargo: '' }, list: [], count: 0, page: 0, meses: [] };
+const S = { perfil: null, cargos: [], tab: 'sem', saldo: null, F: null, filt: { q: '', mes: '', tipo: '', cargo: '' }, list: [], count: 0, page: 0, meses: [] };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = n => { n = Number(n || 0); return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
@@ -299,14 +299,14 @@ function openModal(html) { $('#modal').innerHTML = `<div class="overlay" data-ac
 function closeModal() { $('#modal').innerHTML = ''; avisaNav(); }
 /* Botón "atrás": dentro de Acumulado regresa de pantalla en pantalla; desde el Inicio vuelve a Cheques. */
 function avisaNav() { if (EMBED) avisaPadre({ caja: 'nav' }); }
-window.enRaiz = () => !$('#modal').innerHTML && !document.querySelector('body > .overlay') && S.tab === 'caja';
+window.enRaiz = () => !$('#modal').innerHTML && !document.querySelector('body > .overlay') && S.tab === 'sem' && !S.semSel;
 window.atras = () => {
   const ov = document.querySelector('body > .overlay'); if (ov) { const no = ov.querySelector('#fzNo, #esOrig, #esOrig2'); if (no) no.click(); return true; }
   if ($('#modal').innerHTML) { closeModal(); return true; }
   if (S.tab === 'sem' && S.semSel) { S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); return true; }
   if (S.tab === 'raya' && S.rayaForm) { if (rfConDatos() && !confirm('¿Descartar la lista sin guardar?')) return true; S.rayaForm = null; viewRaya(); window.scrollTo(0, 0); avisaNav(); return true; }
   if (S.tab === 'raya' && (S.rayaSel || S.rayaSem)) { rayaAtras(); return true; }
-  if (S.tab !== 'caja') { go('caja'); return true; }
+  if (S.tab !== 'sem') { go('sem'); return true; }
   return false;
 };
 const ICON = {
@@ -371,13 +371,13 @@ async function boot() {
   if (c.error) throw c.error;
   S.cargosTodos = c.data || [];
   S.cargos = S.cargosTodos.filter(x => (x.activo || x.solo_caja) && x.nombre !== 'SIN CARGO').sort((a, b) => ordGrupo(a.nombre) - ordGrupo(b.nombre) || a.nombre.localeCompare(b.nombre));
-  S.tab = 'caja';
+  S.tab = 'sem';
   renderShell();
 }
 
 /* ===================== SHELL ===================== */
 function renderShell() {
-  const tabs = [['caja', 'Caja'], ['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['raya', 'Contratistas']];   // Movimientos y Arqueo ocultos; la Bitácora se abre desde Mi cuenta
+  const tabs = [['nuevo', 'Nuevo'], ['sem', 'Semanas'], ['raya', 'Contratistas']];   // Caja, Movimientos y Arqueo ocultos (abre en Semanas); la Bitácora se abre desde Mi cuenta
   $('#app').innerHTML = `
   <header class="top">
     <div class="brand"><span class="mark">$</span><div>JOCRIS · Caja de Efectivo<small>${esc(S.perfil.nombre)} · ${esc(rolTxt(S.perfil.rol))}</small></div></div>
@@ -1095,10 +1095,10 @@ async function guardar() {
       try { await subirArchivo(mov.id, F.files); } catch (e) { aviso = 'El movimiento se guardó, pero NO se pudo subir el ticket (' + errMsg(e) + '). Ábrelo y agrégalo.'; }
     }
     closeModal(); S.F = null;
-    if (aviso) { toast(aviso, 'err'); go('caja'); setTimeout(() => openDetail(mov.id), 300); }
-    else if (d.rec) { S._recMov = mov; go('caja'); openModal(`<h2 style="margin-top:0">Gasto guardado</h2><div class="okbox">Imprime el recibo para que lo firme <b>${esc(d.recRecibe)}</b>. Ya firmado, súbele la foto desde el detalle del gasto.</div>
+    if (aviso) { toast(aviso, 'err'); go('sem'); setTimeout(() => openDetail(mov.id), 300); }
+    else if (d.rec) { S._recMov = mov; go('sem'); openModal(`<h2 style="margin-top:0">Gasto guardado</h2><div class="okbox">Imprime el recibo para que lo firme <b>${esc(d.recRecibe)}</b>. Ya firmado, súbele la foto desde el detalle del gasto.</div>
       <div class="row" style="margin-top:12px"><button class="btn gold grow" data-act="imprecibo" data-id="${mov.id}">Imprimir recibo</button><button class="btn ghost" data-act="detalle" data-id="${mov.id}">Ver gasto</button></div>`); }
-    else { toast(g ? 'Gasto guardado.' : 'Entrada guardada.', 'ok'); go('caja'); }
+    else { toast(g ? 'Gasto guardado.' : 'Entrada guardada.', 'ok'); go('sem'); }
   } catch (e) {
     F.enviando = false; closeModal(); toast(errMsg(e), 'err');
   }
