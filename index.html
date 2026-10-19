@@ -423,7 +423,7 @@ function go(tab, opts) {
   S.tab = tab;
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   if (tab !== 'nuevo') S.F = null;
-  if (tab === 'sem' && !(opts && opts.keep)) { S.semSel = null; S.hist = null; }
+  if (tab === 'sem' && !(opts && opts.keep)) { S.semSel = null; S.hist = null; S.semG = ''; }
   if (tab === 'raya' && !(opts && opts.keep)) { S.raya = null; S.hist = null; S.rayaSel = S.rayaSem = S.rayaForm = null; S.rayaNav = []; }
   ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit, raya: viewRaya }[tab])(opts);
   window.scrollTo(0, 0); avisaNav(); selloActualiza();
@@ -1198,19 +1198,24 @@ async function viewSem() {
   if (!S.semanas.length) return $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal</h2></div><div class="card empty">${ICON.empty}<div>Todavía no hay gastos ni historial.</div></div>`;
   const w = S.semSel && S.semanas.find(x => x.semana === S.semSel);
   if (w) return viewSemDet(w);
-  const tot = S.semanas.reduce((a, x) => a + x.c, 0), n = S.semanas.length;
-  const mxW = S.semanas.reduce((a, x) => x.c > a.c ? x : a), mnW = S.semanas.reduce((a, x) => x.c < a.c ? x : a);
+  const G = S.semG || '';
+  const SEM = G ? S.semanas.map(x => { const rows = x.rows.filter(r => (r.grupo || 'OTROS') === G); return rows.length ? { ...x, rows, c: rows.reduce((a, r) => a + cents(r.importe), 0), nApp: rows.filter(r => r.origen === 'app').length } : null; }).filter(Boolean) : S.semanas;
+  const HIST = G ? S.hist.filter(r => (r.grupo || 'OTROS') === G) : S.hist;
+  if (!SEM.length) { S.semG = ''; return viewSem(); }
+  const tot = SEM.reduce((a, x) => a + x.c, 0), n = SEM.length;
+  const mxW = SEM.reduce((a, x) => x.c > a.c ? x : a), mnW = SEM.reduce((a, x) => x.c < a.c ? x : a);
   const gy = {}; S.hist.forEach(r => { const k = r.grupo || 'OTROS'; gy[k] = (gy[k] || 0) + cents(r.importe); });
   const garr = Object.entries(gy).sort((a, b) => b[1] - a[1]); const gmx = garr[0][1];
-  const anios = [...new Set(S.semanas.map(x => anioSem(x.semana)))].sort(); const anio = anios.length > 1 ? anios[0] + '–' + anios[anios.length - 1] : anios[0];
+  const anios = [...new Set(SEM.map(x => anioSem(x.semana)))].sort(); const anio = anios.length > 1 ? anios[0] + '–' + anios[anios.length - 1] : anios[0];
   let html = '', lastM = '';
   const mxc = mxW.c;
-  S.semanas.forEach(x => {
+  SEM.forEach(x => {
     const m = addDias(x.semana, 3).slice(0, 7); if (m !== lastM) { lastM = m; html += `<div class="dayh">${esc(mesTxt(m))}</div>`; }
     html += `<div class="item semitem" data-act="sem" data-id="${x.semana}"><div class="top"><div class="hl b">${esc(semEtq(x.semana))} <span class="mut" style="font-weight:600">· del ${esc(semTxt(x.semana))}</span>${x.semana === lunesDe(hoyMx()) ? ' <span class="chip ent">En curso</span>' : ''}</div><span class="money">${fmt(x.c / 100)}</span></div>
       <div class="mut sm">${x.rows.length} líneas${x.nApp ? ` · ${x.nApp} capturada(s) en la app` : ''}${x.hojas.size ? ' · ' + esc(hojaTxt(x)) : ''}</div><div class="bar"><i style="width:${Math.max(3, Math.round(x.c / mxc * 100))}%"></i></div></div>`;
   });
   $('#view').innerHTML = `<div class="pagehead"><h2>Gasto semanal ${esc(anio)}</h2><span class="sub">Semanas de lunes a domingo</span></div>
+    ${G ? `<div class="card" style="padding:10px;display:flex;align-items:center;gap:10px;justify-content:space-between"><div><span class="mut sm">Filtrando por grupo</span><div class="b">${esc(G)}</div></div><button class="btn ghost sm" data-act="semgrupo" data-id="${esc(G)}">Quitar filtro ✕</button></div>` : ''}
     <div class="statgrid">
       <div class="stat out"><div class="l">Total ${esc(anio)}</div><div class="v">${fmt(tot / 100)}</div></div>
       <div class="stat"><div class="l">Promedio semanal</div><div class="v">${fmt(Math.round(tot / n) / 100)}</div></div>
@@ -1219,13 +1224,13 @@ async function viewSem() {
     <div class="filters card" style="padding:10px"><input type="text" id="semQ" placeholder="Buscar en todas las semanas (concepto, folio, persona)…" value="${esc(S.semQ || '')}"></div>
     <div id="semRes" class="hidden"></div>
     <div id="semLista">
-      <div class="card bars sembars"><div class="b" style="margin-bottom:4px">Total ${esc(anio)} por grupo</div>${garr.map(([g, v]) => `<div class="br"><div class="n">${esc(g)}</div><div class="bar"><i style="width:${Math.max(2, Math.round(v / gmx * 100))}%"></i></div><div class="m">${fmt(v / 100)}</div></div>`).join('')}</div>
+      <div class="card bars sembars"><div class="b" style="margin-bottom:4px">Total ${esc(anio)} por grupo <span class="mut sm" style="font-weight:500">· toca un grupo para filtrar</span></div>${garr.map(([g, v]) => `<div class="br" data-act="semgrupo" data-id="${esc(g)}" style="cursor:pointer;${G && G !== g ? 'opacity:.45' : ''}"><div class="n" style="${G === g ? 'text-decoration:underline' : ''}">${esc(g)}</div><div class="bar"><i style="width:${Math.max(2, Math.round(v / gmx * 100))}%"></i></div><div class="m">${fmt(v / 100)}</div></div>`).join('')}</div>
       <div class="r" style="margin-bottom:6px"><button class="btn ghost sm" data-act="semxlsall">Descargar todo en Excel</button></div>
       ${html}</div>`;
   const pintaBusqueda = () => {
     const q = norm($('#semQ').value.trim()); S.semQ = $('#semQ').value.trim();
     if (q.length < 2) { $('#semRes').classList.add('hidden'); $('#semLista').classList.remove('hidden'); return; }
-    const hit = S.hist.filter(r => norm(`${r.concepto} ${r.folio || ''} ${r.grupo} ${r.nota || ''}`).includes(q)).sort((a, b) => a.semana < b.semana ? 1 : -1);
+    const hit = HIST.filter(r => norm(`${r.concepto} ${r.folio || ''} ${r.grupo} ${r.nota || ''}`).includes(q)).sort((a, b) => a.semana < b.semana ? 1 : -1);
     const sum = hit.reduce((a, r) => a + cents(r.importe), 0);
     $('#semLista').classList.add('hidden'); const box = $('#semRes'); box.classList.remove('hidden');
     box.innerHTML = hit.length ? `<div class="card"><div class="b">${hit.length} línea(s) · ${fmt(sum / 100)}</div><div class="mut sm">Toca una línea para abrir su semana.</div></div>
@@ -1237,12 +1242,13 @@ async function viewSem() {
 }
 function viewSemDet(w) {
   const i = S.semanas.indexOf(w), nueva = S.semanas[i - 1], vieja = S.semanas[i + 1];
-  const gs = gruposDe(w);
+  const gs = gruposDe(w).filter(g => !S.semG || g.nombre === S.semG);
+  const wc = S.semG ? gs.reduce((a, g) => a + g.c, 0) : w.c;
   $('#view').innerHTML = `<div class="pagehead"><h2>${esc(semEtq(w.semana))}</h2><span class="sub">Del ${esc(semTxt(w.semana))} · lunes a domingo</span></div>
     <div class="semnav"><button class="btn ghost sm" data-act="sembak">← Todas las semanas</button></div>
-    <div class="saldo"><div class="lbl">Gasto de la semana ${semNum(w.semana)}</div><div class="num">${fmt(w.c / 100)}</div><div class="sub2">${w.rows.length} líneas · ${gs.length} grupos${w.hojas.size ? ' · ' + esc(hojaTxt(w)) : ''}</div></div>
+    <div class="saldo"><div class="lbl">Gasto de la semana ${semNum(w.semana)}</div><div class="num">${fmt(wc / 100)}</div><div class="sub2">${S.semG ? 'Solo ' + esc(S.semG) + ' · ' : ''}${gs.reduce((a, g) => a + g.rows.length, 0)} líneas · ${gs.length} grupos${w.hojas.size ? ' · ' + esc(hojaTxt(w)) : ''}</div></div>
     <div class="semnav">${vieja ? `<button class="btn ghost sm" data-act="sem" data-id="${vieja.semana}">‹ Sem ${semNum(vieja.semana)}</button>` : ''}${nueva ? `<button class="btn ghost sm" data-act="sem" data-id="${nueva.semana}">Sem ${semNum(nueva.semana)} ›</button>` : ''}</div>
-    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${w.c ? Math.round(g.c / w.c * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => r.origen === 'app' ? `<div data-act="detalle" data-id="${r.id}" style="cursor:pointer">${lineaSem(r)}</div>` : lineaSem(r)).join('')}${g.nombre === 'CONTRATISTAS' ? '<div id="rayaLink"></div>' : ''}</details>`).join('')}
+    ${gs.map(g => `<details class="sg" open><summary><span class="gn">${esc(g.nombre)}</span><span class="pc">${wc ? Math.round(g.c / wc * 100) : 0}%</span><span class="gt">${fmt(g.c / 100)}</span></summary>${g.rows.map(r => r.origen === 'app' ? `<div data-act="detalle" data-id="${r.id}" style="cursor:pointer">${lineaSem(r)}</div>` : lineaSem(r)).join('')}${g.nombre === 'CONTRATISTAS' ? '<div id="rayaLink"></div>' : ''}</details>`).join('')}
     <div class="r" style="margin:6px 0 12px"><button class="btn ghost sm" data-act="semxls" data-id="${w.semana}">Descargar esta semana en Excel</button></div>`;
   if (gs.some(g => g.nombre === 'CONTRATISTAS')) pintaRayaLink(w.semana);
 }
@@ -1777,6 +1783,7 @@ document.addEventListener('click', async ev => {
       case 'quitarfaltan': S._soloFaltan = false; viewMov({ keep: true }); break;
       case 'mas': if (el.disabled) break; el.disabled = true; S.page++; await loadMov(); break;
       case 'sem': S.semSel = id; viewSem(); window.scrollTo(0, 0); avisaNav(); break;
+      case 'semgrupo': S.semG = S.semG === id ? '' : id; viewSem(); window.scrollTo(0, 0); break;
       case 'sembak': S.semSel = null; viewSem(); window.scrollTo(0, 0); avisaNav(); break;
       case 'semxls': await semExcel(id); break;
       case 'semxlsall': await semExcel(null); break;
