@@ -108,7 +108,7 @@ nav.tabs button.on svg{transform:translateY(-1px);stroke:var(--navy)}
 nav.tabs button.on::before{content:"";position:absolute;top:-5px;left:30%;right:30%;height:3px;border-radius:0 0 4px 4px;background:var(--gold)}
 nav.tabs .badge{top:2px;left:calc(50% + 6px);box-shadow:0 0 0 2px #fff}
 main{padding:16px 14px 24px}
-.pagehead{display:flex;align-items:flex-end;gap:10px;margin:4px 2px 14px}
+.pagehead{display:flex;align-items:flex-end;gap:10px;margin:4px 2px 14px;position:relative}.sello{position:absolute;top:-4px;right:2px;font-size:10.5px;line-height:1.25;color:var(--mut);text-align:right;white-space:nowrap;pointer-events:none}.sello b{font-weight:700;color:var(--ink)}
 .pagehead h2{margin:0;font-size:22px;letter-spacing:-.01em}
 .pagehead .sub{color:var(--mut);font-size:13px;margin-bottom:2px}
 .card{border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid #e6eaf1}
@@ -390,6 +390,33 @@ function renderShell() {
   go(S.tab);
 }
 function rfConDatos() { return !!(S.rayaForm && S.rayaForm.filas.some(f => f.nombre.trim() || f.importe.trim())); }
+/* Fecha de última actualización en la esquina de cada apartado */
+const SELLO_FUENTE = {
+  sem: { t: 'caja_historial_semanal', c: 'creado_en', f: 'semana', a: 'Última carga', b: 'Última semana' },
+  raya: { t: 'caja_raya', c: 'creado_en', f: 'semana', a: 'Última carga', b: 'Última raya' },
+  nuevo: { t: 'caja_movimientos', c: 'creado_en', f: 'fecha', a: 'Último movimiento', b: 'Fecha' }
+};
+const selloTxt = {};
+const selloFecha = iso => { try { return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, ''); } catch (e) { return ''; } };
+function selloPon() {
+  const ph = document.querySelector('#view .pagehead'); if (!ph || ph.querySelector('.sello')) return;
+  const t = selloTxt[S.tab]; if (!t) return;
+  const e = document.createElement('span'); e.className = 'sello'; e.innerHTML = t; ph.appendChild(e);
+}
+let selloObs = null;
+async function selloActualiza() {
+  if (!selloObs && $('#view')) { selloObs = new MutationObserver(selloPon); selloObs.observe($('#view'), { childList: true, subtree: true }); }
+  const tab = S.tab, d = SELLO_FUENTE[tab]; if (!d) return;
+  try {
+    const { data } = await sb.from(d.t).select(d.c).order(d.c, { ascending: false }).limit(1);
+    const r = data && data[0]; if (!r || !r[d.c]) return;
+    let h = esc(d.a) + ': <b>' + esc(selloFecha(r[d.c])) + '</b>';
+    const q = await sb.from(d.t).select(d.f).order(d.f, { ascending: false }).limit(1); const m = q.data && q.data[0];
+    if (m && m[d.f] && tab !== 'nuevo') h += '<br>' + esc(d.b) + ': <b>' + esc(fdate(m[d.f])) + '</b>';
+    selloTxt[tab] = h; if (S.tab === tab) selloPon();
+  } catch (e) { }
+}
+
 function go(tab, opts) {
   navSet('jc_caja_tab', tab);
   if (S.tab === 'raya' && tab !== 'raya' && rfConDatos() && !confirm('Tienes una lista de raya sin guardar. ¿Salir y perder los cambios?')) return;
@@ -399,7 +426,7 @@ function go(tab, opts) {
   if (tab === 'sem' && !(opts && opts.keep)) { S.semSel = null; S.hist = null; }
   if (tab === 'raya' && !(opts && opts.keep)) { S.raya = null; S.hist = null; S.rayaSel = S.rayaSem = S.rayaForm = null; S.rayaNav = []; }
   ({ caja: viewCaja, mov: viewMov, nuevo: viewNuevo, arq: viewArq, sem: viewSem, bit: viewBit, raya: viewRaya }[tab])(opts);
-  window.scrollTo(0, 0); avisaNav();
+  window.scrollTo(0, 0); avisaNav(); selloActualiza();
 }
 
 /* ===================== CONSULTAS ===================== */
