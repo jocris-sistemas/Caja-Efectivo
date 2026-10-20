@@ -229,6 +229,28 @@ table.raya .chip{white-space:normal}
 .sl.evrow .m{display:flex;gap:6px;align-items:center}.sl.evrow a{color:var(--navy2)}
 .sl.rayalink{cursor:pointer;background:#f7f9fc}.sl.rayalink:hover{background:#eef3fa}.sl.rayalink .m{color:var(--mut)}
 input.autollenado{background:rgba(224,180,74,.16)!important;border-color:#e0b44a!important}
+/* Escritorio: estilo página web (menú arriba, contenido ancho, listas en columnas) */
+@media(min-width:1100px){
+  #app{display:flex;flex-direction:column;min-height:100vh}
+  header.top{padding-left:28px;padding-right:28px}
+  main{max-width:min(1500px,96vw);width:100%;padding:20px 28px 28px;flex:1}
+  nav.tabs{order:1;position:static;justify-content:flex-start;gap:4px;padding:0 28px;border-top:0;border-bottom:1px solid var(--line);box-shadow:0 1px 3px rgba(20,52,92,.05)}
+  nav.tabs button{flex:none;max-width:none;display:inline-flex;flex-direction:row;align-items:center;gap:8px;padding:13px 18px;font-size:14px;box-shadow:none}
+  nav.tabs button svg{width:18px;height:18px}
+  nav.tabs button.on{box-shadow:inset 0 -3px 0 var(--gold)}
+  main{order:2}
+  .sumbar{bottom:16px}
+  .statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #semLista,#rayaBody,#rayLista{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;align-items:start}
+  #semLista>*,#rayaBody>*,#rayLista>*{grid-column:1/-1}
+  #semLista>.item,#rayaBody>.item,#rayLista>.item{grid-column:auto;margin:0}
+  #view:has(>details.sg){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px;align-items:start}
+  #view:has(>details.sg)>*{grid-column:1/-1}
+  #view:has(>details.sg)>details.sg{grid-column:auto}
+}
+@media(min-width:1700px){
+  #semLista,#rayaBody,#rayLista{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 </style>
 </head>
 <body>
